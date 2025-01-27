@@ -1,6 +1,9 @@
 # Text-to-3D Model addin for Blender using Ollama and OpenAI GPT
 
 This project demonstrates how to integrate AI-powered large language models (LLMs) with Blender to create a text-to-graphics modeling workflow. The system supports both open-source LLMs (e.g., Ollama-supported models) and OpenAI GPT, enabling users to generate 3D models in Blender by simply entering text prompts.
+</br>
+The below explains how to operate this in detail.</br>
+- [Using Open-Source Models with Blender for AI-Assisted 3D Modeling: Comparative Study with OpenAI GPT](https://medium.com/@laputa99999/using-open-source-models-with-blender-for-ai-assisted-3d-modeling-comparative-study-with-openai-9848209f93b8)
 
 ## Features
 - **Custom Blender UI Panel**: Allows users to select an AI model and input text prompts directly in Blender's 3D Viewport.
