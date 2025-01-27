@@ -1,4 +1,4 @@
-# title: Blender AI LLM Addin
+# title: Blender AI LLM Addin for Text to 3D Graphics Model
 # version: 1.0.0
 # date: 2025-1-26
 # authors: Taewook Kang
@@ -13,7 +13,7 @@ class OBJECT_PT_CustomPanel(bpy.types.Panel):
 	bl_idname = "OBJECT_PT_custom_panel"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = "Gen AI Graphics"
+	bl_category = "Gen AI 3D Graphics Model"
 
 	def draw(self, context):
 		layout = self.layout
@@ -33,7 +33,7 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 		user_prompt = context.scene.user_prompt
 		gen_code(option, 'coding Blender python program using bpy, basic grammar without Explanation, "#" inline comments, complicated grammar like lamda and function under user request. do not delete the previous objects. user request is', user_prompt)
 		# make box, position (6,-3) with yellow color
-		# Create 100 cubes. The y position of each cube follows the cosine function along the x-axis with random color.
+		# Create 100 cubes. The y position of each cube follows the cosine function along the x-axis with random color, size.
 		# Generate 50 cubes which have positions on each x, y axis on grid style and each cube has random color, size.
 
 		return {'FINISHED'}
