@@ -6,7 +6,7 @@ The below explains how to operate this in detail.</br>
 - [Using Open-Source Models with Blender for AI-Assisted 3D Modeling: Comparative Study with OpenAI GPT](https://medium.com/@laputa99999/using-open-source-models-with-blender-for-ai-assisted-3d-modeling-comparative-study-with-openai-9848209f93b8)
 </br>
 In addition, the below link explain what is good tool how to visualize data</br>
-- [LLM media art tool and demo](https://github.com/mac999/llm-media-art-demo)
+- **LLM media art tool and demo**(https://github.com/mac999/llm-media-art-demo)
 
 ## Features
 - **Custom Blender UI Panel**: Allows users to select an AI model and input text prompts directly in Blender's 3D Viewport.
