@@ -4,7 +4,7 @@ This project demonstrates how to integrate AI-powered large language models (LLM
 </br>
 The below explains how to operate this in detail.</br>
 - [Using Open-Source Models with Blender for AI-Assisted 3D Modeling: Comparative Study with OpenAI GPT](https://medium.com/@laputa99999/using-open-source-models-with-blender-for-ai-assisted-3d-modeling-comparative-study-with-openai-9848209f93b8)
-In addition, LLM media art tool and demo(https://github.com/mac999/llm-media-art-demo) link explain what is good tool how to visualize data
+- In addition, LLM media art tool and demo(https://github.com/mac999/llm-media-art-demo) link explain what is good tool how to visualize data
 <img src='https://miro.medium.com/v2/resize:fit:720/format:webp/1*afjizeWcUVYJuFNx99ZKKA.png'><br>Prompt: Create 100 cubes along circle line with radius 30. The each cube has random color and size.</br></img>
 
 ## Features
