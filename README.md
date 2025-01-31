@@ -7,6 +7,8 @@ The below explains how to operate this in detail.</br>
 </br>
 In addition, LLM media art tool and demo(https://github.com/mac999/llm-media-art-demo) link explain what is good tool how to visualize data</br>
 
+<img src='https://miro.medium.com/v2/resize:fit:720/format:webp/1*afjizeWcUVYJuFNx99ZKKA.png'/>
+
 ## Features
 - **Custom Blender UI Panel**: Allows users to select an AI model and input text prompts directly in Blender's 3D Viewport.
 - **AI Model Support**: Compatible with both open-source models (e.g., `Gemma`, `Phi`) and OpenAI GPT.
