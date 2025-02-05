@@ -34,8 +34,8 @@ The below explains how to operate this in detail.</br>
 ### Clone the Repository
 Clone this GitHub repository:
 ```bash
-git clone https://github.com/<your-username>/<your-repo-name>.git
-cd <your-repo-name>
+git clone https://github.com/mac999/blender-llm-addin.git
+cd blender-llm-addin
 ```
 
 ### Setting Up API Keys
