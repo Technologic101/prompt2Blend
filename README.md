@@ -50,6 +50,7 @@ For OpenAI GPT integration, replace `<input your OpenAI API key>` in the script 
    - Enter your text prompt.
    - Click **Submit** to generate and execute the Blender Python script.
 5. View the 3D model generated in the Blender scene.
+<img src="https://github.com/mac999/blender-llm-addin/blob/main/doc/img1.PNG"></img>
 
 ## Example Prompts
 - "Create a grid of cubes with random colors and sizes."
