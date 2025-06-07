@@ -17,16 +17,22 @@ bl_info = {
     "category": "Object",
 }
 
+system_prompt = """
+   You are an expert Blender Python developer. Write a complete, ready-to-run Python script using Blender’s bpy API that matches the user's request with the following guidelines:
+
+The script should not clear the scene unless explicitly instructed.
+
+Do not include any code outside the Blender Python API (bpy).
+
+The output should be a single Python script, formatted for direct execution in Blender’s scripting workspace.
+
+If any part of the prompt is ambiguous, make reasonable assumptions.
+"""
+
+
 import bpy
 import sys
 import os
-
-# Debug: Print to console that the addon is loading
-print("=" * 50)
-print("AI LLM Addon: Starting to load...")
-print(f"Blender version: {bpy.app.version}")
-print(f"Python version: {sys.version}")
-print("=" * 50)
 
 # Required dependencies
 REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama']
@@ -66,25 +72,17 @@ print("\nChecking required packages...")
 for package in REQUIRED_PACKAGES:
     check_dependency(package)
 
-# Import available packages
-if DEPENDENCIES_STATUS.get('pandas', False):
-    import pandas as pd
-if DEPENDENCIES_STATUS.get('numpy', False):
-    import numpy as np
-if DEPENDENCIES_STATUS.get('openai', False):
-    from openai import OpenAI
-if DEPENDENCIES_STATUS.get('ollama', False):
-    from ollama import chat, ChatResponse
 
-# Standard library imports
+import pandas as pd
+import numpy as np
+from openai import OpenAI
+from ollama import chat, ChatResponse
 import json
 import re
 import textwrap
 import ast
 import random
 import math
-
-print("All imports completed.")
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
@@ -144,6 +142,52 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         # Toggle debug info
         layout.prop(scene, "show_debug_info", text="Show Debug Info")
 
+# Add a new status panel
+class AIMODEL_PT_StatusPanel(bpy.types.Panel):
+    bl_label = "Status & Messages"
+    bl_idname = "AIMODEL_PT_status_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Gen AI 3D"
+    bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return True
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+        
+        # Show last operation status
+        if hasattr(scene, "ai_last_status"):
+            box = layout.box()
+            box.label(text="Last Operation:", icon='INFO')
+            box.label(text=scene.ai_last_status)
+        
+        # Show dependency status
+        box = layout.box()
+        box.label(text="Dependencies:", icon='PLUGIN')
+        for pkg in REQUIRED_PACKAGES:
+            status = '✓' if DEPENDENCIES_STATUS.get(pkg, False) else '✗'
+            box.label(text=f"{pkg}: {status}")
+        
+        # Show Ollama status
+        if DEPENDENCIES_STATUS.get('ollama', False):
+            box = layout.box()
+            box.label(text="Ollama Status:", icon='SERVER')
+            try:
+                import requests
+                response = requests.get('http://localhost:11434/api/tags')
+                if response.status_code == 200:
+                    models = response.json().get('models', [])
+                    box.label(text=f"✓ Running ({len(models)} models available)")
+                else:
+                    box.label(text="⚠ Server error")
+            except:
+                box.label(text="⚠ Not running")
+
 # Submit operator
 class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
     bl_label = "Submit AI Prompt"
@@ -151,28 +195,27 @@ class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
     bl_description = "Generate 3D model using AI"
     
     def execute(self, context):
-        print("Submit operator called!")
-        
         scene = context.scene
         model = scene.ai_model_selection
         prompt = scene.ai_user_prompt
         
-        print(f"Model: {model}")
-        print(f"Prompt: {prompt}")
+        # Update status
+        scene.ai_last_status = f"Starting generation with {model}..."
+        self.report({'INFO'}, scene.ai_last_status)
         
         # Validate input
         if not prompt.strip():
-            self.report({'ERROR'}, "Please enter a prompt")
+            scene.ai_last_status = "Error: Please enter a prompt"
+            self.report({'ERROR'}, scene.ai_last_status)
             return {'CANCELLED'}
         
         try:
-            self.report({'INFO'}, f"Generating with {model}...")
             generate_3d_model(model, prompt)
-            self.report({'INFO'}, "Code generation completed!")
+            scene.ai_last_status = "Code generation completed successfully!"
+            self.report({'INFO'}, scene.ai_last_status)
         except Exception as e:
-            error_msg = f"Error: {str(e)}"
-            print(f"Exception in execute: {error_msg}")
-            self.report({'ERROR'}, error_msg)
+            scene.ai_last_status = f"Error: {str(e)}"
+            self.report({'ERROR'}, scene.ai_last_status)
             return {'CANCELLED'}
             
         return {'FINISHED'}
@@ -191,7 +234,6 @@ def call_openai(prompt):
         raise Exception("OpenAI library not available")
     
     client = get_openai_client()
-    system_prompt = "You are a Blender Python expert. Generate clean, safe bpy code with comments. Only return Python code in ```python code blocks."
     
     response = client.chat.completions.create(
         model="gpt-4o-mini",  # Using mini for faster/cheaper responses
@@ -200,7 +242,7 @@ def call_openai(prompt):
             {"role": "user", "content": f"Create Blender Python code for: {prompt}"}
         ],
         temperature=0.1,
-        max_tokens=512
+        max_tokens=1512
     )
     return response.choices[0].message.content
 
@@ -209,7 +251,7 @@ def call_ollama(model, prompt):
     if not DEPENDENCIES_STATUS.get('ollama', False):
         raise Exception("Ollama library not available")
     
-    full_prompt = f"Create Blender Python code using bpy for: {prompt}. Return only code with comments."
+    full_prompt = f"{system_prompt}\n\n{prompt}"
     
     response = chat(
         model=model,
@@ -265,7 +307,6 @@ def validate_code_safety(code):
 
 def generate_3d_model(model, prompt):
     """Main function to generate and execute 3D model code"""
-    print(f"Generating 3D model with {model}: {prompt}")
     
     # Get AI response
     if model == 'chatgpt':
@@ -273,7 +314,6 @@ def generate_3d_model(model, prompt):
     else:
         ai_response = call_ollama(model, prompt)
     
-    print(f"AI Response received: {len(ai_response)} characters")
     print(f"Response preview: {ai_response[:200]}...")
     
     # Extract and validate code
@@ -342,6 +382,12 @@ def register_properties():
         maxlen=2048
     )
     
+    bpy.types.Scene.ai_last_status = bpy.props.StringProperty(
+        name="Last Status",
+        description="Last operation status",
+        default="Ready"
+    )
+    
     bpy.types.Scene.show_debug_info = bpy.props.BoolProperty(
         name="Debug Info",
         description="Show debug information",
@@ -356,6 +402,7 @@ def unregister_properties():
     try:
         del bpy.types.Scene.ai_model_selection
         del bpy.types.Scene.ai_user_prompt
+        del bpy.types.Scene.ai_last_status
         del bpy.types.Scene.show_debug_info
         print("Properties unregistered successfully!")
     except:
@@ -385,18 +432,20 @@ class AIMODEL_OT_RefreshModels(bpy.types.Operator):
             default='chatgpt'
         )
         
-        self.report({'INFO'}, f"Found {len(ollama_models)} Ollama models")
+        # Update status
+        context.scene.ai_last_status = f"Refreshed models: Found {len(ollama_models)} Ollama models"
+        self.report({'INFO'}, context.scene.ai_last_status)
         return {'FINISHED'}
 
 # Registration
 classes = (
     AIMODEL_PT_MainPanel,
+    AIMODEL_PT_StatusPanel,
     AIMODEL_OT_SubmitPrompt,
     AIMODEL_OT_RefreshModels,
 )
 
 def register():
-    print("Starting addon registration...")
     
     # Register classes
     for cls in classes:
@@ -409,9 +458,6 @@ def register():
     
     # Register properties
     register_properties()
-    
-    print("🎉 AI LLM Addon registered successfully!")
-    print("Look for 'Gen AI 3D' tab in the 3D Viewport sidebar (press N)")
 
 def unregister():
     print("Starting addon unregistration...")
