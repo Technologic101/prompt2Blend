@@ -28,39 +28,52 @@ print(f"Blender version: {bpy.app.version}")
 print(f"Python version: {sys.version}")
 print("=" * 50)
 
+# Required dependencies
+REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama']
+
 # Check for required dependencies with detailed feedback
 DEPENDENCIES_STATUS = {}
 
-def check_dependency(module_name, import_statement=None):
-    """Check if a dependency is available and report status"""
+def get_blender_python_path():
+    """Get the path to Blender's Python executable"""
+    return sys.executable
+
+def check_dependency(module_name):
+    """Check if a dependency is available and provide installation instructions if missing"""
     try:
-        if import_statement:
-            exec(import_statement)
-        else:
-            __import__(module_name)
+        __import__(module_name)
         DEPENDENCIES_STATUS[module_name] = True
         print(f"✓ {module_name} - Available")
         return True
-    except ImportError as e:
+    except ImportError:
         DEPENDENCIES_STATUS[module_name] = False
-        print(f"✗ {module_name} - Not available: {e}")
+        print(f"✗ {module_name} - Not available")
+        
+        # Get Blender's Python path
+        blender_python = get_blender_python_path()
+        
+        # Provide clear installation instructions
+        print("\nTo install missing packages:")
+        print("1. Open Terminal/Command Prompt")
+        print(f"2. Run this command: {blender_python} -m pip install {module_name}")
+        print("\nIf you get a permission error:")
+        print("On Windows: Run Command Prompt as Administrator")
+        print("On Mac/Linux: Add 'sudo' before the command")
         return False
 
 # Check all dependencies
-print("Checking dependencies...")
-HAS_PANDAS = check_dependency("pandas", "import pandas as pd")
-HAS_NUMPY = check_dependency("numpy", "import numpy as np")
-HAS_OPENAI = check_dependency("openai", "from openai import OpenAI")
-HAS_OLLAMA = check_dependency("ollama", "from ollama import chat, ChatResponse")
+print("\nChecking required packages...")
+for package in REQUIRED_PACKAGES:
+    check_dependency(package)
 
-# Import what we can
-if HAS_PANDAS:
+# Import available packages
+if DEPENDENCIES_STATUS.get('pandas', False):
     import pandas as pd
-if HAS_NUMPY:
+if DEPENDENCIES_STATUS.get('numpy', False):
     import numpy as np
-if HAS_OPENAI:
+if DEPENDENCIES_STATUS.get('openai', False):
     from openai import OpenAI
-if HAS_OLLAMA:
+if DEPENDENCIES_STATUS.get('ollama', False):
     from ollama import chat, ChatResponse
 
 # Standard library imports
@@ -101,9 +114,9 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         
         # Show dependency status
         selected_model = scene.ai_model_selection
-        if selected_model == 'chatgpt' and not HAS_OPENAI:
+        if selected_model == 'chatgpt' and not DEPENDENCIES_STATUS.get('openai', False):
             box.label(text="⚠ OpenAI library missing", icon='ERROR')
-        elif selected_model != 'chatgpt' and not HAS_OLLAMA:
+        elif selected_model != 'chatgpt' and not DEPENDENCIES_STATUS.get('ollama', False):
             box.label(text="⚠ Ollama library missing", icon='ERROR')
         
         # User prompt
@@ -122,8 +135,8 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
             layout.separator()
             debug_box = layout.box()
             debug_box.label(text="Debug Info:", icon='INFO')
-            debug_box.label(text=f"OpenAI: {'✓' if HAS_OPENAI else '✗'}")
-            debug_box.label(text=f"Ollama: {'✓' if HAS_OLLAMA else '✗'}")
+            debug_box.label(text=f"OpenAI: {'✓' if DEPENDENCIES_STATUS.get('openai', False) else '✗'}")
+            debug_box.label(text=f"Ollama: {'✓' if DEPENDENCIES_STATUS.get('ollama', False) else '✗'}")
             debug_box.label(text=f"Selected: {selected_model}")
         
         # Toggle debug info
@@ -150,14 +163,6 @@ class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
             self.report({'ERROR'}, "Please enter a prompt")
             return {'CANCELLED'}
         
-        # Check dependencies
-        if model == 'chatgpt' and not HAS_OPENAI:
-            self.report({'ERROR'}, "OpenAI library not installed. Run: pip install openai")
-            return {'CANCELLED'}
-        elif model != 'chatgpt' and not HAS_OLLAMA:
-            self.report({'ERROR'}, "Ollama library not installed. Run: pip install ollama")
-            return {'CANCELLED'}
-        
         try:
             self.report({'INFO'}, f"Generating with {model}...")
             generate_3d_model(model, prompt)
@@ -170,22 +175,6 @@ class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
             
         return {'FINISHED'}
 
-# Test operator to verify UI is working
-class AIMODEL_OT_TestOperator(bpy.types.Operator):
-    bl_label = "Test Connection"
-    bl_idname = "aimodel.test_operator"
-    bl_description = "Test if the addon is working"
-    
-    def execute(self, context):
-        self.report({'INFO'}, "Addon is working! Dependencies checked.")
-        print("Test operator executed successfully!")
-        
-        # Create a simple test cube
-        bpy.ops.mesh.primitive_cube_add(location=(0, 0, 2))
-        bpy.context.active_object.name = "AI_Test_Cube"
-        
-        return {'FINISHED'}
-
 # Core AI functions
 def get_openai_client():
     """Get OpenAI client with API key"""
@@ -196,7 +185,7 @@ def get_openai_client():
 
 def call_openai(prompt):
     """Call OpenAI API"""
-    if not HAS_OPENAI:
+    if not DEPENDENCIES_STATUS.get('openai', False):
         raise Exception("OpenAI library not available")
     
     client = get_openai_client()
@@ -215,7 +204,7 @@ def call_openai(prompt):
 
 def call_ollama(model, prompt):
     """Call Ollama API"""
-    if not HAS_OLLAMA:
+    if not DEPENDENCIES_STATUS.get('ollama', False):
         raise Exception("Ollama library not available")
     
     full_prompt = f"Create Blender Python code using bpy for: {prompt}. Return only code with comments."
@@ -350,8 +339,7 @@ def unregister_properties():
 # Registration
 classes = (
     AIMODEL_PT_MainPanel,
-    AIMODEL_OT_SubmitPrompt,
-    AIMODEL_OT_TestOperator,
+    AIMODEL_OT_SubmitPrompt
 )
 
 def register():
