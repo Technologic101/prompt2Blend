@@ -18,15 +18,14 @@ bl_info = {
 }
 
 system_prompt = """
-   You are an expert Blender Python developer. Write a complete, ready-to-run Python script using Blender’s bpy API that matches the user's request with the following guidelines:
+   You are an expert Blender Python developer. Write a complete, ready-to-run Python script using Blender's bpy API that matches the user's request with the following guidelines:
 
 The script should not clear the scene unless explicitly instructed.
 
 Do not include any code outside the Blender Python API (bpy).
 
-The output should be a single Python script, formatted for direct execution in Blender’s scripting workspace.
+The output should be a single Python script, formatted for direct execution in Blender's scripting workspace.
 
-If any part of the prompt is ambiguous, make reasonable assumptions.
 """
 
 
@@ -105,6 +104,22 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         layout.label(text="AI 3D Model Generator", icon='MESH_CUBE')
         layout.separator()
         
+        # API Key Management
+        box = layout.box()
+        box.label(text="OpenAI API Key:", icon='KEY')
+        
+        # Show API key status
+        if scene.ai_openai_key:
+            row = box.row()
+            row.label(text="✓ API Key is configured", icon='CHECKMARK')
+            row.operator("aimodel.manage_api_key", text="", icon='X').action = 'CLEAR'
+        else:
+            row = box.row()
+            row.label(text="⚠ API Key not configured", icon='ERROR')
+            op = row.operator("aimodel.manage_api_key", text="Set API Key", icon='KEYINGSET')
+            op.action = 'SET'
+            op.api_key = ""  # Clear any previous value
+        
         # Model selection with refresh button
         box = layout.box()
         row = box.row()
@@ -166,13 +181,6 @@ class AIMODEL_PT_StatusPanel(bpy.types.Panel):
             box.label(text="Last Operation:", icon='INFO')
             box.label(text=scene.ai_last_status)
         
-        # Show dependency status
-        box = layout.box()
-        box.label(text="Dependencies:", icon='PLUGIN')
-        for pkg in REQUIRED_PACKAGES:
-            status = '✓' if DEPENDENCIES_STATUS.get(pkg, False) else '✗'
-            box.label(text=f"{pkg}: {status}")
-        
         # Show Ollama status
         if DEPENDENCIES_STATUS.get('ollama', False):
             box = layout.box()
@@ -223,9 +231,9 @@ class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
 # Core AI functions
 def get_openai_client():
     """Get OpenAI client with API key"""
-    api_key = os.environ.get('OPENAI_API_KEY')
+    api_key = bpy.context.scene.ai_openai_key
     if not api_key:
-        raise Exception("Set OPENAI_API_KEY environment variable")
+        raise Exception("OpenAI API key not configured. Please set your API key in the addon settings.")
     return OpenAI(api_key=api_key)
 
 def call_openai(prompt):
@@ -382,6 +390,13 @@ def register_properties():
         maxlen=2048
     )
     
+    bpy.types.Scene.ai_openai_key = bpy.props.StringProperty(
+        name="OpenAI API Key",
+        description="Your OpenAI API key",
+        default="",
+        subtype='PASSWORD'
+    )
+    
     bpy.types.Scene.ai_last_status = bpy.props.StringProperty(
         name="Last Status",
         description="Last operation status",
@@ -402,6 +417,7 @@ def unregister_properties():
     try:
         del bpy.types.Scene.ai_model_selection
         del bpy.types.Scene.ai_user_prompt
+        del bpy.types.Scene.ai_openai_key
         del bpy.types.Scene.ai_last_status
         del bpy.types.Scene.show_debug_info
         print("Properties unregistered successfully!")
@@ -437,12 +453,49 @@ class AIMODEL_OT_RefreshModels(bpy.types.Operator):
         self.report({'INFO'}, context.scene.ai_last_status)
         return {'FINISHED'}
 
+# Add API key management operator
+class AIMODEL_OT_ManageAPIKey(bpy.types.Operator):
+    bl_label = "Manage API Key"
+    bl_idname = "aimodel.manage_api_key"
+    bl_description = "Set or clear your OpenAI API key"
+    
+    action: bpy.props.EnumProperty(
+        name="Action",
+        items=[
+            ('SET', "Set Key", "Set a new API key"),
+            ('CLEAR', "Clear Key", "Remove the saved API key")
+        ],
+        default='SET'
+    )
+    
+    api_key: bpy.props.StringProperty(
+        name="API Key",
+        description="Your OpenAI API key",
+        default="",
+        subtype='PASSWORD'
+    )
+    
+    def execute(self, context):
+        if self.action == 'SET':
+            if not self.api_key:
+                self.report({'ERROR'}, "Please enter an API key")
+                return {'CANCELLED'}
+            context.scene.ai_openai_key = self.api_key
+            self.report({'INFO'}, "API key saved")
+            context.scene.ai_last_status = "API key saved successfully"
+        else:  # CLEAR
+            context.scene.ai_openai_key = ""
+            self.report({'INFO'}, "API key cleared")
+            context.scene.ai_last_status = "API key cleared"
+        return {'FINISHED'}
+
 # Registration
 classes = (
     AIMODEL_PT_MainPanel,
     AIMODEL_PT_StatusPanel,
     AIMODEL_OT_SubmitPrompt,
     AIMODEL_OT_RefreshModels,
+    AIMODEL_OT_ManageAPIKey,
 )
 
 def register():
