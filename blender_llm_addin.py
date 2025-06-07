@@ -107,9 +107,11 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         layout.label(text="AI 3D Model Generator", icon='MESH_CUBE')
         layout.separator()
         
-        # Model selection
+        # Model selection with refresh button
         box = layout.box()
-        box.label(text="Select AI Model:")
+        row = box.row()
+        row.label(text="Select AI Model:")
+        row.operator("aimodel.refresh_models", text="", icon='FILE_REFRESH')
         box.prop(scene, "ai_model_selection", text="")
         
         # Show dependency status
@@ -293,20 +295,43 @@ def generate_3d_model(model, prompt):
     except Exception as e:
         raise Exception(f"Code execution failed: {e}")
 
+def get_ollama_models():
+    """Fetch available models from Ollama"""
+    try:
+        if not DEPENDENCIES_STATUS.get('ollama', False):
+            return []
+        
+        import requests
+        response = requests.get('http://localhost:11434/api/tags')
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            return [(model['name'], model['name'], f"Ollama {model['name']} model") 
+                   for model in models]
+        return []
+    except Exception as e:
+        print(f"Error fetching Ollama models: {e}")
+        return []
+
 # Properties
 def register_properties():
     """Register addon properties"""
     print("Registering properties...")
     
+    # Get available Ollama models
+    ollama_models = get_ollama_models()
+    
+    # Base model items
+    model_items = [
+        ('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"),
+    ]
+    
+    # Add Ollama models if available
+    model_items.extend(ollama_models)
+    
     bpy.types.Scene.ai_model_selection = bpy.props.EnumProperty(
         name="AI Model",
         description="Select the AI model to use",
-        items=[
-            ('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"),
-            ('llama3.2', "Llama 3.2", "Meta Llama via Ollama"),
-            ('codellama', "CodeLlama", "Code-focused Llama via Ollama"),
-            ('gemma2', "Gemma 2", "Google Gemma via Ollama"),
-        ],
+        items=model_items,
         default='chatgpt'
     )
     
@@ -336,10 +361,38 @@ def unregister_properties():
     except:
         print("Error unregistering properties (they may not exist)")
 
+# Add refresh operator
+class AIMODEL_OT_RefreshModels(bpy.types.Operator):
+    bl_label = "Refresh Models"
+    bl_idname = "aimodel.refresh_models"
+    bl_description = "Refresh available Ollama models"
+    
+    def execute(self, context):
+        # Get new model list
+        ollama_models = get_ollama_models()
+        
+        # Update the enum property
+        model_items = [
+            ('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"),
+        ]
+        model_items.extend(ollama_models)
+        
+        # Update the property
+        bpy.types.Scene.ai_model_selection = bpy.props.EnumProperty(
+            name="AI Model",
+            description="Select the AI model to use",
+            items=model_items,
+            default='chatgpt'
+        )
+        
+        self.report({'INFO'}, f"Found {len(ollama_models)} Ollama models")
+        return {'FINISHED'}
+
 # Registration
 classes = (
     AIMODEL_PT_MainPanel,
-    AIMODEL_OT_SubmitPrompt
+    AIMODEL_OT_SubmitPrompt,
+    AIMODEL_OT_RefreshModels,
 )
 
 def register():
