@@ -32,6 +32,8 @@ The output should be a single Python script, formatted for direct execution in B
 import bpy
 import sys
 import os
+from datetime import datetime
+from pathlib import Path
 
 # Required dependencies
 REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama']
@@ -180,6 +182,11 @@ class AIMODEL_PT_StatusPanel(bpy.types.Panel):
             box = layout.box()
             box.label(text="Last Operation:", icon='INFO')
             box.label(text=scene.ai_last_status)
+            
+            # If the status contains a log file path, add a button to open it
+            if "Error log saved to:" in scene.ai_last_status:
+                row = box.row()
+                row.operator("aimodel.open_log", text="Open Error Log", icon='TEXT')
         
         # Show Ollama status
         if DEPENDENCIES_STATUS.get('ollama', False):
@@ -313,9 +320,41 @@ def validate_code_safety(code):
     
     return True
 
+def get_log_path():
+    """Get the path to the log directory"""
+    log_dir = Path(bpy.utils.resource_path('USER')) / "scripts" / "addons" / "ai_llm_addon" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+def save_error_log(prompt, model, generated_code, error):
+    """Save error information to a log file"""
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = get_log_path() / f"error_log_{timestamp}.txt"
+        
+        with open(log_file, 'w') as f:
+            f.write("=" * 50 + "\n")
+            f.write(f"Error Log - {timestamp}\n")
+            f.write("=" * 50 + "\n\n")
+            
+            f.write("Model: " + model + "\n")
+            f.write("Prompt: " + prompt + "\n\n")
+            
+            f.write("Generated Code:\n")
+            f.write("-" * 50 + "\n")
+            f.write(generated_code + "\n\n")
+            
+            f.write("Error:\n")
+            f.write("-" * 50 + "\n")
+            f.write(str(error) + "\n")
+        
+        return str(log_file)
+    except Exception as e:
+        print(f"Failed to save error log: {e}")
+        return None
+
 def generate_3d_model(model, prompt):
     """Main function to generate and execute 3D model code"""
-    
     # Get AI response
     if model == 'chatgpt':
         ai_response = call_openai(prompt)
@@ -341,7 +380,12 @@ def generate_3d_model(model, prompt):
         exec(code, safe_globals)
         print("Code executed successfully!")
     except Exception as e:
-        raise Exception(f"Code execution failed: {e}")
+        # Save error log
+        log_path = save_error_log(prompt, model, code, e)
+        if log_path:
+            raise Exception(f"Code execution failed. Error log saved to: {log_path}\nError: {str(e)}")
+        else:
+            raise Exception(f"Code execution failed: {str(e)}")
 
 def get_ollama_models():
     """Fetch available models from Ollama"""
@@ -489,6 +533,27 @@ class AIMODEL_OT_ManageAPIKey(bpy.types.Operator):
             context.scene.ai_last_status = "API key cleared"
         return {'FINISHED'}
 
+# Add operator to open log files
+class AIMODEL_OT_OpenLog(bpy.types.Operator):
+    bl_label = "Open Error Log"
+    bl_idname = "aimodel.open_log"
+    bl_description = "Open the error log file in Blender's text editor"
+    
+    def execute(self, context):
+        # Extract log path from status message
+        status = context.scene.ai_last_status
+        if "Error log saved to:" in status:
+            log_path = status.split("Error log saved to:")[1].split("\n")[0].strip()
+            
+            # Open the file in Blender's text editor
+            try:
+                bpy.ops.text.open(filepath=log_path)
+                self.report({'INFO'}, f"Opened log file: {log_path}")
+            except Exception as e:
+                self.report({'ERROR'}, f"Failed to open log file: {e}")
+        
+        return {'FINISHED'}
+
 # Registration
 classes = (
     AIMODEL_PT_MainPanel,
@@ -496,6 +561,7 @@ classes = (
     AIMODEL_OT_SubmitPrompt,
     AIMODEL_OT_RefreshModels,
     AIMODEL_OT_ManageAPIKey,
+    AIMODEL_OT_OpenLog,
 )
 
 def register():
