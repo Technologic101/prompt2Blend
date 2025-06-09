@@ -36,7 +36,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Required dependencies
-REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama']
+REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama', 'scikit-learn']
 
 # Check for required dependencies with detailed feedback
 DEPENDENCIES_STATUS = {}
@@ -84,6 +84,8 @@ import textwrap
 import ast
 import random
 import math
+from typing import List, Dict
+from sklearn.metrics.pairwise import cosine_similarity
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
@@ -188,20 +190,15 @@ class AIMODEL_PT_StatusPanel(bpy.types.Panel):
                 row = box.row()
                 row.operator("aimodel.open_log", text="Open Error Log", icon='TEXT')
         
-        # Show Ollama status
-        if DEPENDENCIES_STATUS.get('ollama', False):
-            box = layout.box()
-            box.label(text="Ollama Status:", icon='SERVER')
-            try:
-                import requests
-                response = requests.get('http://localhost:11434/api/tags')
-                if response.status_code == 200:
-                    models = response.json().get('models', [])
-                    box.label(text=f"✓ Running ({len(models)} models available)")
-                else:
-                    box.label(text="⚠ Server error")
-            except:
-                box.label(text="⚠ Not running")
+        # Show RAG status
+        box = layout.box()
+        box.label(text="RAG Status:", icon='FILE_TEXT')
+        retriever = get_rag_retriever()
+        if retriever:
+            box.label(text="✓ RAG enabled with Blender API context", icon='CHECKMARK')
+        else:
+            box.label(text="⚠ RAG not available", icon='ERROR')
+            box.label(text="Add blender_api_embeddings.json to addon directory")
 
 # Submit operator
 class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
@@ -244,33 +241,84 @@ def get_openai_client():
     return OpenAI(api_key=api_key)
 
 def call_openai(prompt):
-    """Call OpenAI API"""
+    """Call OpenAI API with RAG if available"""
     if not DEPENDENCIES_STATUS.get('openai', False):
         raise Exception("OpenAI library not available")
     
     client = get_openai_client()
     
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",  # Using mini for faster/cheaper responses
-        messages=[
+    # Try to use RAG if available
+    retriever = get_rag_retriever()
+    if retriever:
+        try:
+            # Get embeddings for the prompt
+            query_embedding = embed_texts([prompt])[0]
+            
+            # Retrieve relevant context
+            top_chunks = retriever.retrieve(query_embedding)
+            context = "\n\n".join(top_chunks)
+            
+            # Create messages with context
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Relevant Blender API context:\n{context}\n\nYour request: {prompt}"}
+            ]
+        except Exception as e:
+            print(f"RAG failed, falling back to direct prompt: {e}")
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+    else:
+        messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Create Blender Python code for: {prompt}"}
-        ],
+            {"role": "user", "content": prompt}
+        ]
+    
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=messages,
         temperature=0.1,
         max_tokens=1512
     )
     return response.choices[0].message.content
 
 def call_ollama(model, prompt):
-    """Call Ollama API"""
+    """Call Ollama API with RAG if available"""
     if not DEPENDENCIES_STATUS.get('ollama', False):
         raise Exception("Ollama library not available")
     
-    full_prompt = f"{system_prompt}\n\n{prompt}"
+    # Try to use RAG if available
+    retriever = get_rag_retriever()
+    if retriever:
+        try:
+            # Get embeddings for the prompt
+            query_embedding = embed_texts([prompt])[0]
+            
+            # Retrieve relevant context
+            top_chunks = retriever.retrieve(query_embedding)
+            context = "\n\n".join(top_chunks)
+            
+            # Create messages with context
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Relevant Blender API context:\n{context}\n\nYour request: {prompt}"}
+            ]
+        except Exception as e:
+            print(f"RAG failed, falling back to direct prompt: {e}")
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+    else:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ]
     
     response = chat(
         model=model,
-        messages=[{"role": "user", "content": full_prompt}]
+        messages=messages
     )
     
     if response and hasattr(response, 'message'):
@@ -612,3 +660,53 @@ if __name__ == "__main__":
         print(f"❌ Direct test failed: {e}")
         import traceback
         traceback.print_exc()
+
+class RAGDocChunk:
+    def __init__(self, content: str, embedding: List[float]):
+        self.content = content
+        self.embedding = embedding
+
+class RAGRetriever:
+    def __init__(self, chunks: List[RAGDocChunk]):
+        self.chunks = chunks
+
+    @classmethod
+    def from_json(cls, path: str):
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        chunks = [RAGDocChunk(d['content'], d['embedding']) for d in data]
+        return cls(chunks)
+
+    def retrieve(self, query_embedding: List[float], top_k=4) -> List[str]:
+        vectors = np.array([chunk.embedding for chunk in self.chunks])
+        similarities = cosine_similarity([query_embedding], vectors)[0]
+        top_indices = similarities.argsort()[-top_k:][::-1]
+        return [self.chunks[i].content for i in top_indices]
+
+def get_rag_retriever():
+    """Get the RAG retriever instance"""
+    try:
+        # Look for the embeddings file in the addon directory
+        addon_path = Path(__file__).parent
+        embeddings_path = addon_path / "blender_api_embeddings.json"
+        
+        if not embeddings_path.exists():
+            return None
+            
+        return RAGRetriever.from_json(str(embeddings_path))
+    except Exception as e:
+        print(f"Failed to load RAG retriever: {e}")
+        return None
+
+def embed_texts(texts: List[str]) -> List[List[float]]:
+    """Get embeddings for texts using OpenAI API"""
+    try:
+        client = get_openai_client()
+        response = client.embeddings.create(
+            input=texts,
+            model="text-embedding-3-small"
+        )
+        return [item.embedding for item in response.data]
+    except Exception as e:
+        print(f"Failed to get embeddings: {e}")
+        return []
