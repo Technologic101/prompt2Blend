@@ -1,1 +1,4 @@
 .env
+.vscode
+temp_docs
+.DS_Store
