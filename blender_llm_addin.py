@@ -199,7 +199,7 @@ def call_openai(prompt):
     if retriever:
         try:
             # Get embeddings for the prompt
-            query_embedding = embed_texts([prompt])[0]
+            query_embedding = rag_agent.embed_texts([prompt])[0]
             
             # Retrieve relevant context
             top_chunks = retriever.retrieve(query_embedding)
@@ -237,7 +237,7 @@ def call_ollama(model, prompt):
     if retriever:
         try:
             # Get embeddings for the prompt
-            query_embedding = embed_texts([prompt])[0]
+            query_embedding = rag_agent.embed_texts([prompt])[0]
             
             # Retrieve relevant context
             top_chunks = retriever.retrieve(query_embedding)
@@ -678,16 +678,3 @@ def get_rag_retriever():
     except Exception as e:
         print(f"Failed to load RAG retriever: {e}")
         return None
-
-def embed_texts(texts: List[str]) -> List[List[float]]:
-    """Get embeddings for texts using OpenAI API"""
-    try:
-        client = get_openai_client()
-        response = client.embeddings.create(
-            input=texts,
-            model="text-embedding-3-small"
-        )
-        return [item.embedding for item in response.data]
-    except Exception as e:
-        print(f"Failed to get embeddings: {e}")
-        return []
