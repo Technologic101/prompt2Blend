@@ -2,14 +2,23 @@
 
 import os
 import json
-import openai
 import numpy as np
-from typing import List, Dict
+from typing import List, Dict, Optional
 from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    import openai
+except ImportError:
+    openai = None
+try:
+    import requests
+except ImportError:
+    requests = None
 
 # Set this before usage or load from secure config
 def set_openai_key(api_key: str):
-    openai.api_key = api_key
+    if openai:
+        openai.api_key = api_key
 
 class RAGDocChunk:
     def __init__(self, content: str, embedding: List[float]):
@@ -33,42 +42,68 @@ class RAGRetriever:
         top_indices = similarities.argsort()[-top_k:][::-1]
         return [self.chunks[i].content for i in top_indices]
 
-def embed_texts(texts: List[str]) -> List[List[float]]:
-    # Use the OpenAI API v1 for embeddings
-    response = openai.embeddings.create(
-        input=texts,
-        model="text-embedding-3-small"
-    )
-    # The response object has a .data attribute, which is a list of objects with an .embedding attribute
-    return [item.embedding for item in response.data]
+def embed_texts(texts: List[str], provider: str = 'openai', model: Optional[str] = None, openai_key: Optional[str] = None) -> List[List[float]]:
+    if provider == 'openai':
+        if openai is None:
+            raise ImportError('openai package not installed')
+        if openai_key:
+            openai.api_key = openai_key
+        response = openai.embeddings.create(
+            input=texts,
+            model="text-embedding-3-small"
+        )
+        return [item.embedding for item in response.data]
+    elif provider == 'ollama':
+        if requests is None:
+            raise ImportError('requests package not installed')
+        # Use Ollama's /api/embeddings endpoint
+        url = 'http://localhost:11434/api/embeddings'
+        payload = {"model": model or "nomic-embed-text", "prompt": texts}
+        r = requests.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        return data["embeddings"]
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
 
-def create_embedding_json(doc_path: str, output_path: str, chunk_size: int = 500):
+def create_embedding_json(doc_path: str, output_path: str, chunk_size: int = 500, provider: str = 'openai', model: Optional[str] = None, openai_key: Optional[str] = None):
     with open(doc_path, 'r', encoding='utf-8') as f:
         text = f.read()
-
     chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
-    embeddings = embed_texts(chunks)
+    embeddings = embed_texts(chunks, provider=provider, model=model, openai_key=openai_key)
     data = [{'content': c, 'embedding': e} for c, e in zip(chunks, embeddings)]
-
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 
-def query_with_rag(prompt: str, retriever: RAGRetriever) -> str:
-    embedded_query = embed_texts([prompt])[0]
+def query_with_rag(prompt: str, retriever: RAGRetriever, provider: str = 'openai', model: Optional[str] = None, openai_key: Optional[str] = None) -> str:
+    embedded_query = embed_texts([prompt], provider=provider, model=model, openai_key=openai_key)[0]
     top_chunks = retriever.retrieve(embedded_query)
-
     context = "\n\n".join(top_chunks)
     messages = [
         {"role": "system", "content": "You are an expert Blender scripting assistant."},
         {"role": "user", "content": f"Relevant context:\n{context}\n\nPrompt:\n{prompt}"}
     ]
-
-    # Use the OpenAI API v1 for chat completions
-    response = openai.chat.completions.create(
-        model="gpt-4",
-        messages=messages,  # type: ignore
-        temperature=0.3
-    )
-    # The response object has a .choices attribute, which is a list of objects with a .message.content attribute
-    content = response.choices[0].message.content
-    return content if content is not None else ""
+    if provider == 'openai':
+        if openai is None:
+            raise ImportError('openai package not installed')
+        if openai_key:
+            openai.api_key = openai_key
+        response = openai.chat.completions.create(
+            model="gpt-4",
+            messages=messages,  # type: ignore
+            temperature=0.3
+        )
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+    elif provider == 'ollama':
+        if requests is None:
+            raise ImportError('requests package not installed')
+        url = 'http://localhost:11434/api/chat'
+        payload = {"model": model or "llama3", "messages": messages}
+        r = requests.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        # Ollama returns {"message": {"role":..., "content":...}}
+        return data["message"]["content"]
+    else:
+        raise ValueError(f"Unknown provider: {provider}")

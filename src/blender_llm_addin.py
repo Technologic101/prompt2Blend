@@ -1,13 +1,14 @@
-# title: Blender AI LLM Addon for Text to 3D Graphics Model
-# version: 1.1.0
-# date: 2025-6-7
-# authors: Taewook Kang, Anthony Chapman
-# email: laputa99999@gmail.com
+# title: Blender AI LLM 3D Graphics Model Generator
+# addon: prompt2blend
+# version: 1.0.0
+# date: 2025-6-16
+# authors: Anthony Chapman
+# email: adchap77@gmail.com
 # description: This addon is a Blender addon that allows you to generate 3D graphics models using AI models.
 
 bl_info = {
-    "name": "AI LLM 3D Graphics Model Generator",
-    "author": "Taewook Kang, Anthony Chapman",
+    "name": "Blender AI LLM 3D Graphics Model Generator",
+    "author": "Anthony Chapman",
     "version": (1, 1, 0),
     "blender": (4, 4, 1),
     "location": "View3D > Sidebar > Gen AI 3D Graphics Model",
@@ -22,7 +23,7 @@ system_prompt = """
 
 The script should not clear the scene unless explicitly instructed.
 
-Do not include any code outside the Blender Python API 4.4 (bpy).
+Only use version 4.4 of the Blender API.
 
 The output should be a single Python script, formatted for direct execution in Blender's scripting workspace.
 
@@ -30,86 +31,23 @@ The output should be a single Python script, formatted for direct execution in B
 
 
 import bpy
-import sys
-import os
 from datetime import datetime
 from pathlib import Path
-
-# Required dependencies
-REQUIRED_PACKAGES = ['openai', 'ollama', 'scikit-learn', 'requests']
-
-# Check for required dependencies with detailed feedback
-DEPENDENCIES_STATUS = {}
-
-def get_blender_python_path():
-    """Get the path to Blender's Python executable"""
-    return sys.executable
-
-def check_dependency(module_name):
-    """Check if a dependency is available and provide installation instructions if missing"""
-    try:
-        if module_name == 'openai':
-            return OPENAI_AVAILABLE
-        elif module_name == 'ollama':
-            return OLLAMA_AVAILABLE
-        elif module_name == 'scikit-learn':
-            return SKLEARN_AVAILABLE
-        else:
-            __import__(module_name)
-        DEPENDENCIES_STATUS[module_name] = True
-        print(f"✓ {module_name} - Available")
-        return True
-    except ImportError:
-        DEPENDENCIES_STATUS[module_name] = False
-        print(f"✗ {module_name} - Not available")
-        
-        # Get Blender's Python path
-        blender_python = get_blender_python_path()
-        
-        # Provide clear installation instructions
-        print("\nTo install missing packages:")
-        print("1. Open Terminal/Command Prompt")
-        print(f"2. Run this command: {blender_python} -m pip install {module_name}")
-        print("\nIf you get a permission error:")
-        print("On Windows: Run Command Prompt as Administrator")
-        print("On Mac/Linux: Add 'sudo' before the command")
-        return False
-
-# Check all dependencies
-print("\nChecking required packages...")
-for package in REQUIRED_PACKAGES:
-    check_dependency(package)
-
-
 import json
 import re
-import textwrap
 import ast
 import random
 import math
-from typing import List, Dict
+from typing import List
 from pathlib import Path
-try:
-    from sklearn.metrics.pairwise import cosine_similarity
-    import numpy as np
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
-    print("scikit-learn not available - RAG features will be disabled")
+import importlib
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+import requests
+from openai import OpenAI
+import ollama
 
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    print("OpenAI library not available")
-
-try:
-    import ollama
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-    print("Ollama library not available")
+rag_agent = importlib.import_module('src.rag_agent')
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
@@ -155,13 +93,6 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         row.operator("aimodel.refresh_models", text="", icon='FILE_REFRESH')
         box.prop(scene, "ai_model_selection", text="")
         
-        # Show dependency status
-        selected_model = scene.ai_model_selection
-        if selected_model == 'chatgpt' and not DEPENDENCIES_STATUS.get('openai', False):
-            box.label(text="⚠ OpenAI library missing", icon='ERROR')
-        elif selected_model != 'chatgpt' and not DEPENDENCIES_STATUS.get('ollama', False):
-            box.label(text="⚠ Ollama library missing", icon='ERROR')
-        
         # User prompt
         box = layout.box()
         box.label(text="Your Request:")
@@ -173,14 +104,12 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         row.scale_y = 1.5
         row.operator("aimodel.submit_prompt", text="Generate 3D Model", icon='PLAY')
         
-        # Debug info
+        # Debug info (removed dependency status lines)
         if scene.show_debug_info:
             layout.separator()
             debug_box = layout.box()
             debug_box.label(text="Debug Info:", icon='INFO')
-            debug_box.label(text=f"OpenAI: {'✓' if DEPENDENCIES_STATUS.get('openai', False) else '✗'}")
-            debug_box.label(text=f"Ollama: {'✓' if DEPENDENCIES_STATUS.get('ollama', False) else '✗'}")
-            debug_box.label(text=f"Selected: {selected_model}")
+            debug_box.label(text=f"Selected: {getattr(scene, 'ai_model_selection', 'None')}")
         
         # Toggle debug info
         layout.prop(scene, "show_debug_info", text="Show Debug Info")
@@ -213,16 +142,6 @@ class AIMODEL_PT_StatusPanel(bpy.types.Panel):
             if "Error log saved to:" in scene.ai_last_status:
                 row = box.row()
                 row.operator("aimodel.open_log", text="Open Error Log", icon='TEXT')
-        
-        # Show RAG status
-        box = layout.box()
-        box.label(text="RAG Status:", icon='FILE_TEXT')
-        retriever = get_rag_retriever()
-        if retriever:
-            box.label(text="✓ RAG enabled with Blender API context", icon='CHECKMARK')
-        else:
-            box.label(text="⚠ RAG not available", icon='ERROR')
-            box.label(text="Add blender_api_embeddings.json to addon directory")
 
 # Submit operator
 class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
@@ -266,9 +185,6 @@ def get_openai_client():
 
 def call_openai(prompt):
     """Call OpenAI API with RAG if available"""
-    if not OPENAI_AVAILABLE:
-        raise Exception("OpenAI library not available")
-    
     client = get_openai_client()
     
     # Try to use RAG if available
@@ -309,9 +225,6 @@ def call_openai(prompt):
 
 def call_ollama(model, prompt):
     """Call Ollama API with RAG if available"""
-    if not OLLAMA_AVAILABLE:
-        raise Exception("Ollama library not available")
-    
     # Try to use RAG if available
     retriever = get_rag_retriever()
     if retriever:
@@ -431,13 +344,26 @@ def save_error_log(prompt, model, generated_code, error):
         return None
 
 def generate_3d_model(model, prompt):
-    """Main function to generate and execute 3D model code"""
-    # Get AI response
+    """Main function to generate and execute 3D model code using the selected model/provider"""
+    # Determine provider
     if model == 'chatgpt':
-        ai_response = call_openai(prompt)
+        provider = 'openai'
+        model_name = None
+        openai_key = bpy.context.scene.ai_openai_key
     else:
-        ai_response = call_ollama(model, prompt)
-    
+        provider = 'ollama'
+        model_name = model
+        openai_key = None
+    # Use RAG agent for retrieval and code generation
+    retriever = get_rag_retriever()
+    if retriever:
+        ai_response = rag_agent.query_with_rag(prompt, retriever, provider=provider, model=model_name, openai_key=openai_key)
+    else:
+        # fallback to direct call
+        if provider == 'openai':
+            ai_response = call_openai(prompt)
+        else:
+            ai_response = call_ollama(model, prompt)
     if ai_response:
         print(f"Response preview: {ai_response[:200]}...")
     else:
@@ -470,10 +396,6 @@ def generate_3d_model(model, prompt):
 def get_ollama_models():
     """Fetch available models from Ollama"""
     try:
-        if not DEPENDENCIES_STATUS.get('ollama', False):
-            return []
-        
-        import requests
         response = requests.get('http://localhost:11434/api/tags')
         if response.status_code == 200:
             models = response.json().get('models', [])
@@ -484,27 +406,32 @@ def get_ollama_models():
         print(f"Error fetching Ollama models: {e}")
         return []
 
+def get_available_models(scene):
+    """Return a list of (id, label, description) for available models only."""
+    items = []
+    # OpenAI available if API key is set
+    if getattr(scene, 'ai_openai_key', None):
+        items.append(('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"))
+    # Add Ollama models if available
+    ollama_models = get_ollama_models()
+    items.extend(ollama_models)
+    return items
+
+def update_model_enum(self, context):
+    """Dynamically update the EnumProperty items for model selection."""
+    models = get_available_models(context.scene)
+    return models if models else [('none', 'None', 'No available models')]
+
 # Properties
 def register_properties():
     """Register addon properties"""
     print("Registering properties...")
-    
-    # Get available Ollama models
-    ollama_models = get_ollama_models()
-    
-    # Base model items
-    model_items = [
-        ('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"),
-    ]
-    
-    # Add Ollama models if available
-    model_items.extend(ollama_models)
-    
+    # Dynamically set model items
     bpy.types.Scene.ai_model_selection = bpy.props.EnumProperty(
         name="AI Model",
         description="Select the AI model to use",
-        items=model_items,
-        default='chatgpt'
+        items=update_model_enum,
+        default='ollama'
     )
     
     bpy.types.Scene.ai_user_prompt = bpy.props.StringProperty(
@@ -699,7 +626,7 @@ class RAGDocChunk:
         self.embedding = embedding
 
 class RAGRetriever:
-    def __init__(self, chunks: List[RAGDocChunk]):
+    def __init__(self, chunks: List['RAGDocChunk']):
         self.chunks = chunks
 
     @classmethod
@@ -709,11 +636,7 @@ class RAGRetriever:
         chunks = [RAGDocChunk(d['content'], d['embedding']) for d in data]
         return cls(chunks)
 
-    def retrieve(self, query_embedding: List[float], top_k=4) -> List[str]:
-        if not SKLEARN_AVAILABLE:
-            # Fallback: return first few chunks if sklearn not available
-            return [chunk.content for chunk in self.chunks[:top_k]]
-        
+    def retrieve(self, query_embedding: list, top_k=4) -> list:
         vectors = np.array([chunk.embedding for chunk in self.chunks])
         query_vector = np.array([query_embedding])
         similarities = cosine_similarity(query_vector, vectors)[0]
