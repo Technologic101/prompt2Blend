@@ -22,7 +22,7 @@ system_prompt = """
 
 The script should not clear the scene unless explicitly instructed.
 
-Do not include any code outside the Blender Python API (bpy).
+Do not include any code outside the Blender Python API 4.4 (bpy).
 
 The output should be a single Python script, formatted for direct execution in Blender's scripting workspace.
 
@@ -36,7 +36,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Required dependencies
-REQUIRED_PACKAGES = ['pandas', 'numpy', 'openai', 'ollama', 'scikit-learn']
+REQUIRED_PACKAGES = ['openai', 'ollama', 'scikit-learn', 'requests']
 
 # Check for required dependencies with detailed feedback
 DEPENDENCIES_STATUS = {}
@@ -48,7 +48,14 @@ def get_blender_python_path():
 def check_dependency(module_name):
     """Check if a dependency is available and provide installation instructions if missing"""
     try:
-        __import__(module_name)
+        if module_name == 'openai':
+            return OPENAI_AVAILABLE
+        elif module_name == 'ollama':
+            return OLLAMA_AVAILABLE
+        elif module_name == 'scikit-learn':
+            return SKLEARN_AVAILABLE
+        else:
+            __import__(module_name)
         DEPENDENCIES_STATUS[module_name] = True
         print(f"✓ {module_name} - Available")
         return True
@@ -74,10 +81,6 @@ for package in REQUIRED_PACKAGES:
     check_dependency(package)
 
 
-import pandas as pd
-import numpy as np
-from openai import OpenAI
-from ollama import chat, ChatResponse
 import json
 import re
 import textwrap
@@ -85,7 +88,28 @@ import ast
 import random
 import math
 from typing import List, Dict
-from sklearn.metrics.pairwise import cosine_similarity
+from pathlib import Path
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    print("scikit-learn not available - RAG features will be disabled")
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    print("OpenAI library not available")
+
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    print("Ollama library not available")
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
@@ -242,7 +266,7 @@ def get_openai_client():
 
 def call_openai(prompt):
     """Call OpenAI API with RAG if available"""
-    if not DEPENDENCIES_STATUS.get('openai', False):
+    if not OPENAI_AVAILABLE:
         raise Exception("OpenAI library not available")
     
     client = get_openai_client()
@@ -258,7 +282,7 @@ def call_openai(prompt):
             top_chunks = retriever.retrieve(query_embedding)
             context = "\n\n".join(top_chunks)
             
-            # Create messages with context
+            # Create messages with context - using proper typing
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Relevant Blender API context:\n{context}\n\nYour request: {prompt}"}
@@ -277,7 +301,7 @@ def call_openai(prompt):
     
     response = client.chat.completions.create(
         model="gpt-4",
-        messages=messages,
+        messages=messages,  # type: ignore
         temperature=0.1,
         max_tokens=1512
     )
@@ -285,7 +309,7 @@ def call_openai(prompt):
 
 def call_ollama(model, prompt):
     """Call Ollama API with RAG if available"""
-    if not DEPENDENCIES_STATUS.get('ollama', False):
+    if not OLLAMA_AVAILABLE:
         raise Exception("Ollama library not available")
     
     # Try to use RAG if available
@@ -316,15 +340,20 @@ def call_ollama(model, prompt):
             {"role": "user", "content": prompt}
         ]
     
-    response = chat(
+    response = ollama.chat(
         model=model,
-        messages=messages
+        messages=messages  # type: ignore
     )
     
-    if response and hasattr(response, 'message'):
-        return response.message.content
-    else:
-        raise Exception("Invalid response from Ollama")
+    # Handle different response formats from ollama
+    try:
+        if isinstance(response, dict) and 'message' in response:
+            return response['message']['content']
+        else:
+            # Try accessing as object attributes
+            return str(getattr(getattr(response, 'message', {}), 'content', ''))
+    except (AttributeError, KeyError, TypeError) as e:
+        raise Exception(f"Failed to parse Ollama response: {e}")
 
 def extract_python_code(text):
     """Extract Python code from AI response"""
@@ -409,7 +438,10 @@ def generate_3d_model(model, prompt):
     else:
         ai_response = call_ollama(model, prompt)
     
-    print(f"Response preview: {ai_response[:200]}...")
+    if ai_response:
+        print(f"Response preview: {ai_response[:200]}...")
+    else:
+        raise Exception("No response received from AI model")
     
     # Extract and validate code
     code = extract_python_code(ai_response)
@@ -551,7 +583,7 @@ class AIMODEL_OT_ManageAPIKey(bpy.types.Operator):
     bl_idname = "aimodel.manage_api_key"
     bl_description = "Set or clear your OpenAI API key"
     
-    action: bpy.props.EnumProperty(
+    action = bpy.props.EnumProperty(
         name="Action",
         items=[
             ('SET', "Set Key", "Set a new API key"),
@@ -560,7 +592,7 @@ class AIMODEL_OT_ManageAPIKey(bpy.types.Operator):
         default='SET'
     )
     
-    api_key: bpy.props.StringProperty(
+    api_key = bpy.props.StringProperty(
         name="API Key",
         description="Your OpenAI API key",
         default="",
@@ -678,8 +710,13 @@ class RAGRetriever:
         return cls(chunks)
 
     def retrieve(self, query_embedding: List[float], top_k=4) -> List[str]:
+        if not SKLEARN_AVAILABLE:
+            # Fallback: return first few chunks if sklearn not available
+            return [chunk.content for chunk in self.chunks[:top_k]]
+        
         vectors = np.array([chunk.embedding for chunk in self.chunks])
-        similarities = cosine_similarity([query_embedding], vectors)[0]
+        query_vector = np.array([query_embedding])
+        similarities = cosine_similarity(query_vector, vectors)[0]
         top_indices = similarities.argsort()[-top_k:][::-1]
         return [self.chunks[i].content for i in top_indices]
 

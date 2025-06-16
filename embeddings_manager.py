@@ -12,18 +12,16 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor
 from typing import Sequence, Mapping
 import psutil
+import tarfile  # Add this import
 
 class EmbeddingsManager:
     def __init__(self, persist_directory="./chroma_db", chunk_size=1000, chunk_overlap=200, 
                  embedding_model="all-MiniLM-L6-v2", batch_size=50):
-        """Initialize the embeddings manager with a persistent storage location.
+        """Initialize the embeddings manager with a persistent storage location."""
         
-        Args:
-            persist_directory: Directory to store the database
-            chunk_size: Maximum size of text chunks
-            chunk_overlap: Number of characters to overlap between chunks
-            embedding_model: ChromaDB embedding model to use for embeddings
-        """
+        # Auto-extract database if needed (for Blender add-on distribution)
+        self._extract_database_if_needed()
+        
         self.batch_size = batch_size
         self.persist_directory = os.path.abspath(persist_directory)
         print(f"Initializing ChromaDB client with directory: {self.persist_directory}")
@@ -50,6 +48,42 @@ class EmbeddingsManager:
         
         print("ChromaDB client initialized successfully")
 
+    def _extract_database_if_needed(self):
+        """Extract compressed ChromaDB for Blender add-on distribution."""
+        addon_dir = os.path.dirname(__file__)
+        chroma_path = os.path.join(addon_dir, "chroma_db")
+        archive_path = os.path.join(addon_dir, "chroma_db.tar.gz")
+        
+        # If database doesn't exist but archive does, extract it
+        if not os.path.exists(chroma_path) and os.path.exists(archive_path):
+            print("Extracting Blender documentation database...")
+            try:
+                with tarfile.open(archive_path, 'r:gz') as tar:
+                    tar.extractall(addon_dir)
+                print("Database extracted successfully!")
+                return True
+            except Exception as e:
+                print(f"Error extracting database: {e}")
+                return False
+        
+        return os.path.exists(chroma_path)
+
+    def ensure_database_ready(self):
+        """Ensure database exists, rebuild if necessary."""
+        if not self.collection_exists("blender_4.4_docs"):
+            zip_path = os.path.join(os.path.dirname(__file__), "doc", "blender_python_reference_4_2.zip")
+            if os.path.exists(zip_path):
+                print("Building Blender documentation database (first time setup)...")
+                result = self.process_zip_file(zip_path, "blender_4.4_docs")
+                # Fix: Check if result is not None before calling .get()
+                if result is not None:
+                    return result.get('status') == 'completed'
+                else:
+                    return False
+            else:
+                print("Warning: Blender documentation not found. Some features may not work.")
+                return False
+        return True
 
     def clear_database(self):
         """Clear the database with improved error handling and verification."""
@@ -183,7 +217,7 @@ class EmbeddingsManager:
                         'has_code': len(code_blocks) > 0,
                         'code_block_count': len(code_blocks),
                         'processing_time': datetime.now().isoformat(),
-                        'blender_version': '4.2',
+                        'blender_version': '4.4',
                         'content_type': 'api_reference' if 'reference' in relative_path.lower() else 'documentation'
                     }
                     
@@ -482,13 +516,13 @@ if __name__ == "__main__":
     manager = EmbeddingsManager()
     
     # Process the Blender Python reference documentation
-    zip_path = "doc/blender_python_reference_4_2.zip"
+    zip_path = "doc/blender_python_reference_4_4.zip"
     if os.path.exists(zip_path):
-        manager.process_zip_file(zip_path, "blender_4.2_docs")
+        manager.process_zip_file(zip_path, "blender_4.4_docs")
         
         # Example query
         query = "How do I create a new mesh in Blender using Python?"
-        results = manager.query_collection("blender_4.2_docs", [query])
+        results = manager.query_collection("blender_4.4_docs", [query])
         
         if results:
             print("\nQuery results:")
