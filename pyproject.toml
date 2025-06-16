@@ -1,7 +1,48 @@
+[build-system]
+requires = ["setuptools>=42.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "blender-llm-addin"
 version = "0.1.0"
 description = "AI integration for Blender to generate Blender API scripts based on user prompts"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+authors = [
+    {name = "Anthony Chapman", email = "adchap77@gmail.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D :: Modeling",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "numpy>=1.24.0,<2.0.0",
+    "requests>=2.31.0",
+    "scikit-learn>=1.3.0",
+    "chromadb>=0.4.24",
+    "openai>=1.0.0",
+    "ollama>=0.1.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+    "mypy>=0.900",
+]
+
+[project.urls]
+Homepage = "https://github.com/Technologic101/prompt2blend"
+Bug Tracker = "https://github.com/Technologic101/prompt2blend/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]

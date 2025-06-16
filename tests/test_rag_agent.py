@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 import tempfile
 import pytest
-from src import rag_agent
+import rag_agent
 
 @pytest.fixture(scope="module")
 def setup_openai_key():
