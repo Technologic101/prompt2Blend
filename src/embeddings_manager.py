@@ -7,7 +7,7 @@ import tempfile
 from tqdm import tqdm
 import re
 from datetime import datetime
-from semantic_chunker import BlenderDocChunker
+from api_embeddings.semantic_chunker import BlenderDocChunker
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from typing import Sequence, Mapping
