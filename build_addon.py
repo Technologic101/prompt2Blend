@@ -97,10 +97,14 @@ def create_zip_addon():
     
     exclude_files = {
         'build_addon.py',
-        'setup.py',
-        'setup.cfg',
         'pyproject.toml',
         'MANIFEST.in',
+        'requirements.txt',
+        'requirements-dev.txt',
+        '.gitignore',
+        'README.md',
+        'ASSESSMENT_REPORT.md',
+        'prompt2Blend.code-workspace',
     }
     
     exclude_extensions = {
@@ -159,5 +163,9 @@ def create_zip_addon():
     print(f"4. Enable the add-on by checking the box next to '{bl_info.get('name', 'Prompt2Blend')}'")
     print("5. Configure your API keys in the add-on preferences")
 
-if __name__ == "__main__":
+def main():
+    """Entry point for console script."""
     create_zip_addon()
+
+if __name__ == "__main__":
+    main()

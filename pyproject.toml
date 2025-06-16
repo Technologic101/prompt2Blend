@@ -3,9 +3,9 @@ requires = ["setuptools>=42.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "blender-llm-addin"
-version = "0.1.0"
-description = "AI integration for Blender to generate Blender API scripts based on user prompts"
+name = "prompt2blend"
+version = "1.1.0"
+description = "Blender add-on for AI-assisted 3D modeling using LLMs"
 readme = "README.md"
 authors = [
     {name = "Anthony Chapman", email = "adchap77@gmail.com"}
@@ -17,6 +17,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Topic :: Multimedia :: Graphics :: 3D :: Modeling",
 ]
 requires-python = ">=3.7"
@@ -39,10 +44,17 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/Technologic101/prompt2blend"
-Bug Tracker = "https://github.com/Technologic101/prompt2blend/issues"
+Repository = "https://github.com/Technologic101/prompt2blend"
+Bug-Tracker = "https://github.com/Technologic101/prompt2blend/issues"
+Documentation = "https://github.com/Technologic101/prompt2blend#readme"
+
+[project.scripts]
+prompt2blend-build = "build_addon:main"
 
 [tool.setuptools]
 include-package-data = true
+py-modules = ["build_addon"]
 
 [tool.setuptools.packages.find]
 where = ["."]
+exclude = ["tests*", "examples*", "dist*", "build*"]

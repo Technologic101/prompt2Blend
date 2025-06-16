@@ -46,13 +46,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 import requests
 from openai import OpenAI
 import ollama
-from rag_agent import RAGDocChunk, RAGRetriever
-
 try:
-    import rag_agent
+    from . import rag_agent
 except ImportError:
-    # Try relative import if the above fails
-    rag_agent = importlib.import_module('.rag_agent', package=__package__)
+    # Fallback for direct execution
+    import rag_agent
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
