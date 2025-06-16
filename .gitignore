@@ -4,3 +4,4 @@
 temp_docs
 .DS_Store
 __pycache__
+*.zip
