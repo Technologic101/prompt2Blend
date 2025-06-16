@@ -2,7 +2,7 @@
 bl_info = {
     "name": "Prompt2Blend: AI-Powered 3D Model Generator",
     "author": "Anthony Chapman",
-    "version": (1, 1, 0),
+    "version": (0, 1, 0),  # Initial release version
     "blender": (4, 4, 1),
     "location": "View3D > Sidebar > Gen AI 3D Graphics Model",
     "description": "Generate 3D models using AI models (OpenAI GPT and Ollama)",

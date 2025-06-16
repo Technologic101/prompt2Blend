@@ -9,46 +9,28 @@ import zipfile
 from pathlib import Path
 
 def get_bl_info():
-    """Get the bl_info dictionary from the add-on."""
-    # Default bl_info in case we can't import the module
-    default_bl_info = {
-        'name': 'Prompt2Blend',
-        'description': 'AI-Powered 3D Model Generator for Blender',
-        'author': 'Anthony Chapman',
-        'version': (1, 1, 0),
-        'blender': (4, 4, 1),
-        'location': 'View3D > Sidebar > Gen AI 3D Graphics Model',
-        'warning': 'Requires OpenAI API key and/or Ollama installation',
-        'category': '3D View',
-    }
-    
-    # Try to read the bl_info directly from the file
-    try:
-        import ast
-        with open('__init__.py', 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        # Parse the AST to find bl_info
-        tree = ast.parse(content)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                if isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'bl_info':
-                    # Convert the AST back to a dictionary
-                    bl_info = {}
-                    for key, value in zip(node.value.keys, node.value.values):
-                        key_name = key.value
-                        if isinstance(value, ast.Str):
-                            bl_info[key_name] = value.s
-                        elif isinstance(value, (ast.Tuple, ast.List)):
-                            bl_info[key_name] = ast.literal_eval(value)
-                        else:
-                            bl_info[key_name] = ast.literal_eval(ast.unparse(value))
-                    return bl_info
-    except Exception as e:
-        print(f"Warning: Could not parse bl_info: {e}")
-    
-    print("Using default bl_info")
-    return default_bl_info
+    """Get the bl_info dictionary from __init__.py (single source of truth)."""
+
+    import ast
+    with open('__init__.py', 'r', encoding='utf-8') as f:
+        content = f.read()
+        
+    # Parse the AST to find bl_info
+    tree = ast.parse(content)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            if isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'bl_info':
+                # Convert the AST back to a dictionary
+                bl_info = {}
+                for key, value in zip(node.value.keys, node.value.values):
+                    key_name = key.value
+                    if isinstance(value, ast.Str):
+                        bl_info[key_name] = value.s
+                    elif isinstance(value, (ast.Tuple, ast.List)):
+                        bl_info[key_name] = ast.literal_eval(value)
+                    else:
+                        bl_info[key_name] = ast.literal_eval(ast.unparse(value))
+                return bl_info
 
 def create_zip_addon():
     """Create a zip file of the add-on for Blender installation."""
@@ -156,12 +138,6 @@ def create_zip_addon():
                 zipf.write(file_path, zip_path_in_zip)
     
     print(f"\n✅ Successfully created {zip_path}")
-    print("\n📦 To install in Blender:")
-    print("1. Open Blender")
-    print("2. Go to Edit > Preferences > Add-ons")
-    print("3. Click 'Install...' and select the zip file")
-    print(f"4. Enable the add-on by checking the box next to '{bl_info.get('name', 'Prompt2Blend')}'")
-    print("5. Configure your API keys in the add-on preferences")
 
 def main():
     """Entry point for console script."""

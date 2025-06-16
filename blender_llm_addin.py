@@ -1,22 +1,13 @@
 # title: Blender AI LLM 3D Graphics Model Generator
 # addon: prompt2blend
-# version: 1.0.0
+# version: 0.1.0
 # date: 2025-6-16
 # authors: Anthony Chapman
 # email: adchap77@gmail.com
 # description: This addon is a Blender addon that allows you to generate 3D graphics models using AI models.
 
-bl_info = {
-    "name": "Blender AI LLM 3D Graphics Model Generator",
-    "author": "Anthony Chapman",
-    "version": (1, 1, 0),
-    "blender": (4, 4, 1),
-    "location": "View3D > Sidebar > Gen AI 3D Graphics Model",
-    "description": "Generate Blender Python code using AI models",
-    "warning": "Requires OpenAI API key and/or Ollama installation",
-    "doc_url": "",
-    "category": "Object",
-}
+# Import add-on metadata from __init__.py (single source of truth)
+# bl_info is defined only in __init__.py
 
 system_prompt = """
    You are an expert Blender Python developer. Write a complete, ready-to-run Python script using Blender's bpy API that matches the user's request with the following guidelines:
@@ -382,12 +373,18 @@ def get_ollama_models():
         print(f"Error fetching Ollama models: {e}")
         return []
 
-def get_available_models(scene):
+def get_available_models(scene=None):
     """Return a list of (id, label, description) for available models only."""
     items = []
+    
+    # If scene is not provided or doesn't have the necessary attributes
+    if scene is None:
+        return items
+        
     # OpenAI available if API key is set
-    if getattr(scene, 'ai_openai_key', None):
+    if hasattr(scene, 'ai_openai_key') and scene.ai_openai_key:
         items.append(('chatgpt', "ChatGPT", "OpenAI ChatGPT (requires API key)"))
+        
     # Add Ollama models if available
     ollama_models = get_ollama_models()
     items.extend(ollama_models)
@@ -395,6 +392,9 @@ def get_available_models(scene):
 
 def get_model_items(self, context):
     """Get the current list of available models"""
+    if not hasattr(context, 'scene'):
+        return DEFAULT_MODEL_ITEMS
+    
     models = get_available_models(context.scene)
     return models if models else DEFAULT_MODEL_ITEMS
 
@@ -405,9 +405,14 @@ DEFAULT_MODEL_ITEMS = [
 
 def update_model_list(context):
     """Update the model list when API key changes"""
-    models = get_available_models(context.scene)
-    if not models:
+    # During registration, context might not have scene attribute
+    if not hasattr(context, 'scene'):
+        # Use default models when scene is not available
         models = DEFAULT_MODEL_ITEMS
+    else:
+        models = get_available_models(context.scene)
+        if not models:
+            models = DEFAULT_MODEL_ITEMS
     
     # Update the property with new items
     bpy.types.Scene.ai_model_selection = bpy.props.EnumProperty(
@@ -457,7 +462,17 @@ def register_properties():
     )
     
     # Register model selection last, after other properties are registered
-    update_model_list(bpy.context)
+    try:
+        update_model_list(bpy.context)
+    except Exception as e:
+        print(f"Warning: Could not update model list during registration: {str(e)}")
+        # Set up a default enum property
+        bpy.types.Scene.ai_model_selection = bpy.props.EnumProperty(
+            name="AI Model",
+            description="Select the AI model to use",
+            items=DEFAULT_MODEL_ITEMS,
+            default=DEFAULT_MODEL_ITEMS[0][0]
+        )
     
     print("Properties registered successfully!")
 
