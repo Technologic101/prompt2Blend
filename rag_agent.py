@@ -36,6 +36,47 @@ class RAGRetriever:
         chunks = [RAGDocChunk(d['content'], d['embedding']) for d in data]
         return cls(chunks)
 
+    @classmethod
+    def from_chromadb(cls, db_path: str):
+        """
+        Load document chunks and embeddings from a ChromaDB SQLite database.
+        Assumes a table with columns for content and embedding (as BLOB or JSON).
+        """
+        import sqlite3
+        import json
+        chunks = []
+        conn = sqlite3.connect(db_path)
+        try:
+            cursor = conn.cursor()
+            # Try to find the table and columns (adjust as needed for your schema)
+            # ChromaDB default: collection, embedding, document, id, etc.
+            # We'll look for 'embeddings' and 'documents' tables
+            # Try to get embeddings and documents from the default ChromaDB schema
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            if 'embeddings' in tables and 'documents' in tables:
+                # Join embeddings and documents on document_id
+                cursor.execute('''
+                    SELECT documents.content, embeddings.embedding
+                    FROM embeddings
+                    JOIN documents ON embeddings.document_id = documents.id
+                ''')
+                rows = cursor.fetchall()
+                for content, embedding_blob in rows:
+                    # Embedding may be stored as JSON or BLOB
+                    try:
+                        embedding = json.loads(embedding_blob)
+                    except Exception:
+                        # If not JSON, try to decode as bytes (float32 array)
+                        import numpy as np
+                        embedding = np.frombuffer(embedding_blob, dtype=np.float32).tolist()
+                    chunks.append(RAGDocChunk(content, embedding))
+            else:
+                raise Exception("ChromaDB schema not recognized. Expected 'embeddings' and 'documents' tables.")
+        finally:
+            conn.close()
+        return cls(chunks)
+
     def retrieve(self, query_embedding: List[float], top_k=4) -> List[str]:
         vectors = np.array([chunk.embedding for chunk in self.chunks])
         similarities = cosine_similarity(np.array([query_embedding]), vectors)[0]

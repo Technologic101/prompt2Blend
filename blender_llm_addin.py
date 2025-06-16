@@ -191,37 +191,22 @@ def get_openai_client():
     return OpenAI(api_key=api_key)
 
 def call_openai(prompt):
-    """Call OpenAI API with RAG if available"""
+    """Call OpenAI API with RAG if available, using shared RAG logic"""
     client = get_openai_client()
-    
-    # Try to use RAG if available
     retriever = get_rag_retriever()
     if retriever:
         try:
-            # Get embeddings for the prompt
-            query_embedding = rag_agent.embed_texts([prompt])[0]
-            
-            # Retrieve relevant context
-            top_chunks = retriever.retrieve(query_embedding)
-            context = "\n\n".join(top_chunks)
-            
-            # Create messages with context - using proper typing
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Relevant Blender API context:\n{context}\n\nYour request: {prompt}"}
-            ]
+            # Use shared RAG query logic
+            return rag_agent.query_with_rag(
+                prompt, retriever, provider='openai', model='gpt-4', openai_key=client.api_key
+            )
         except Exception as e:
             print(f"RAG failed, falling back to direct prompt: {e}")
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-    else:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-    
+    # Fallback: direct prompt
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
+    ]
     response = client.chat.completions.create(
         model="gpt-4",
         messages=messages,  # type: ignore
@@ -231,49 +216,35 @@ def call_openai(prompt):
     return response.choices[0].message.content
 
 def call_ollama(model, prompt):
-    """Call Ollama API with RAG if available"""
-    # Try to use RAG if available
+    """Call Ollama API with RAG if available, using shared RAG logic"""
     retriever = get_rag_retriever()
     if retriever:
         try:
-            # Get embeddings for the prompt
-            query_embedding = rag_agent.embed_texts([prompt])[0]
-            
-            # Retrieve relevant context
-            top_chunks = retriever.retrieve(query_embedding)
-            context = "\n\n".join(top_chunks)
-            
-            # Create messages with context
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Relevant Blender API context:\n{context}\n\nYour request: {prompt}"}
-            ]
+            # Use shared RAG query logic
+            return rag_agent.query_with_rag(
+                prompt, retriever, provider='ollama', model=model
+            )
         except Exception as e:
             print(f"RAG failed, falling back to direct prompt: {e}")
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-    else:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-    
+    # Fallback: direct prompt
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
+    ]
     response = ollama.chat(
         model=model,
         messages=messages  # type: ignore
     )
-    
-    # Handle different response formats from ollama
     try:
         if isinstance(response, dict) and 'message' in response:
             return response['message']['content']
+        elif hasattr(response, 'message'):
+            return response.message['content']
         else:
-            # Try accessing as object attributes
-            return str(getattr(getattr(response, 'message', {}), 'content', ''))
-    except (AttributeError, KeyError, TypeError) as e:
-        raise Exception(f"Failed to parse Ollama response: {e}")
+            return str(response)
+    except Exception as e:
+        print(f"Error parsing Ollama response: {e}")
+        return str(response)
 
 def extract_python_code(text):
     """Extract Python code from AI response"""
@@ -665,16 +636,20 @@ if __name__ == "__main__":
         traceback.print_exc()
 
 def get_rag_retriever():
-    """Get the RAG retriever instance"""
+    """Get the RAG retriever instance from ChromaDB using rag_agent.py logic."""
     try:
-        # Look for the embeddings file in the addon directory
-        addon_path = Path(__file__).parent
-        embeddings_path = addon_path / "blender_api_embeddings.json"
-        
-        if not embeddings_path.exists():
+        # Assume rag_agent.py provides a method to load from ChromaDB
+        # Example: RAGRetriever.from_chromadb(db_path)
+        chromadb_dir = Path(__file__).parent / "chroma_db"
+        db_path = chromadb_dir / "chroma.sqlite3"
+        if not db_path.exists():
+            print(f"ChromaDB database not found at {db_path}")
             return None
-            
-        return RAGRetriever.from_json(str(embeddings_path))
+        if hasattr(rag_agent.RAGRetriever, 'from_chromadb'):
+            return rag_agent.RAGRetriever.from_chromadb(str(db_path))
+        else:
+            print("RAGRetriever.from_chromadb() not implemented in rag_agent.py.")
+            return None
     except Exception as e:
-        print(f"Failed to load RAG retriever: {e}")
+        print(f"Failed to load RAG retriever from ChromaDB: {e}")
         return None
