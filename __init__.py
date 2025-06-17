@@ -22,18 +22,25 @@ except ImportError:
 def register():
     """Register all operators and panels"""
     # First unregister everything to handle reloads
-    unregister()
+    try:
+        unregister()
+        print("Previous registration cleared")
+    except:
+        print("No previous registration to clear")
     
     # Import the module
     from . import blender_llm_addin
     
     # Register the module
     try:
-        blender_llm_addin.register()
-        print("Prompt2Blend add-on registered successfully!")
-        return {'FINISHED'}
+        print("Starting registration of Prompt2Blend add-on...")
+        result = blender_llm_addin.register()
+        print("✓ Prompt2Blend add-on registered successfully!")
+        print("The panel should appear in the 3D Viewport sidebar under the 'Gen AI 3D' tab")
+        print("Look for the tab in the right sidebar (press N if sidebar is hidden)")
+        return result
     except Exception as e:
-        print(f"Error registering Prompt2Blend add-on: {e}")
+        print(f"✗ Error registering Prompt2Blend add-on: {e}")
         import traceback
         traceback.print_exc()
         return {'CANCELLED'}

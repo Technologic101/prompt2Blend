@@ -49,8 +49,7 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
     bl_idname = "AIMODEL_PT_main_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Gen AI 3D"  # Shorter category name
-    bl_context = "objectmode"
+    bl_category = "Gen AI 3D"
 
     @classmethod
     def poll(cls, context):
@@ -63,6 +62,12 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         # Header
         layout.label(text="AI 3D Model Generator", icon='MESH_CUBE')
         layout.separator()
+        
+        # Verify properties are registered
+        if not hasattr(scene, "ai_user_prompt"):
+            layout.label(text="Properties not registered correctly", icon='ERROR')
+            layout.operator("aimodel.refresh_models", text="Try to fix", icon='FILE_REFRESH')
+            return
         
         # API Key Management
         box = layout.box()
@@ -100,15 +105,6 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         row.scale_y = 1.5
         row.operator("aimodel.submit_prompt", text="Generate 3D Model", icon='PLAY')
         
-        # Debug info (removed dependency status lines)
-        if scene.show_debug_info:
-            layout.separator()
-            debug_box = layout.box()
-            debug_box.label(text="Debug Info:", icon='INFO')
-            debug_box.label(text=f"Selected: {getattr(scene, 'ai_model_selection', 'None')}")
-        
-        # Toggle debug info
-        layout.prop(scene, "show_debug_info", text="Show Debug Info")
 
 # Add a new status panel
 class AIMODEL_PT_StatusPanel(bpy.types.Panel):
@@ -117,7 +113,7 @@ class AIMODEL_PT_StatusPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Gen AI 3D"
-    bl_context = "objectmode"
+    # Removed bl_context restriction to make panel visible in all modes
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
@@ -569,20 +565,73 @@ class AIMODEL_OT_OpenLog(bpy.types.Operator):
         
         return {'FINISHED'}
 
+# Add panel verification operator
+class AIMODEL_OT_VerifyPanel(bpy.types.Operator):
+    bl_idname = "aimodel.verify_panel"
+    bl_label = "Debug Panels"
+    bl_description = "Verify if panels are registered and check their visibility status"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        # Check if our panels are registered
+        print("\n--- Panel Verification ---")
+        
+        # Check our own panel registration
+        panel_found = False
+        
+        for panel in bpy.types.Panel.__subclasses__():
+            if panel.__name__.startswith("AIMODEL_PT_"):
+                panel_found = True
+                print(f"Found panel: {panel.__name__} in category '{getattr(panel, 'bl_category', 'None')}'")
+                print(f"  - space_type: {getattr(panel, 'bl_space_type', 'None')}")
+                print(f"  - region_type: {getattr(panel, 'bl_region_type', 'None')}")
+                print(f"  - context: {getattr(panel, 'bl_context', 'None')}")
+                
+        if not panel_found:
+            print("No AIMODEL_PT panels found in registered panel classes!")
+        
+        print("\nTo make the panel visible:")
+        print("1. Press N in the 3D view to show the sidebar")
+        print("2. Look for the 'Gen AI 3D' tab in the sidebar")
+        print("3. If not visible, try switching modes (Object Mode/Edit Mode)")
+        
+        self.report({'INFO'}, "Panel verification completed. Check Blender console for details.")
+        return {'FINISHED'}
+
+
 # Store classes to unregister
-_classes = [
-    AIMODEL_PT_MainPanel,
-    AIMODEL_PT_StatusPanel,
-    AIMODEL_OT_SubmitPrompt,
-    AIMODEL_OT_RefreshModels,
-    AIMODEL_OT_ManageAPIKey,
-    AIMODEL_OT_OpenLog,
-]
+def get_classes():
+    return [
+        AIMODEL_PT_MainPanel,
+        AIMODEL_PT_StatusPanel,
+        AIMODEL_OT_SubmitPrompt,
+        AIMODEL_OT_RefreshModels,
+        AIMODEL_OT_ManageAPIKey,
+        AIMODEL_OT_OpenLog,
+        AIMODEL_OT_VerifyPanel,
+    ]
 
 def register():
-    # Register classes
+    # First, register the properties to ensure they exist when panels need them
+    try:
+        print("Registering properties first...")
+        register_properties()
+        print("✓ Properties registered successfully")
+        print("✓ The panel should appear in one of two places:")
+        print("  1. In the 'Gen AI 3D' tab in the 3D View sidebar (press N to show)")
+        print("  2. Or in the 'Tool' tab (as a fallback)")
+    except Exception as e:
+        print(f"✗ Error registering properties: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+    classes = get_classes()
+    print("Classes to register:", [cls.__name__ for cls in classes])
+    print(f"Total classes: {len(classes)}")
+    print("Registering UI classes...")
     registered_classes = []
-    for cls in _classes:
+    for cls in classes:
         try:
             bpy.utils.register_class(cls)
             registered_classes.append(cls)
@@ -597,30 +646,23 @@ def register():
                     pass
             raise
     
-    # Register properties
-    register_properties()
-    
     print("AI LLM Addon registered successfully!")
     return {'FINISHED'}
 
 def unregister():
-    global _classes
     print("Starting addon unregistration...")
     
     # Unregister properties first
     unregister_properties()
     
     # Unregister classes in reverse order
-    for cls in reversed(_classes):
+    for cls in reversed(get_classes()):
         try:
             if hasattr(bpy.types, cls.__name__):
                 bpy.utils.unregister_class(cls)
                 print(f"✓ Unregistered class: {cls.__name__}")
         except Exception as e:
             print(f"✗ Failed to unregister class {cls.__name__}: {e}")
-    
-    # Clear any remaining references
-    _classes.clear()
     
     # Force garbage collection
     import gc
@@ -651,18 +693,15 @@ if __name__ == "__main__":
 def get_rag_retriever():
     """Get the RAG retriever instance from ChromaDB using rag_agent.py logic."""
     try:
-        # Assume rag_agent.py provides a method to load from ChromaDB
-        # Example: RAGRetriever.from_chromadb(db_path)
-        chromadb_dir = Path(__file__).parent / "chroma_db"
-        db_path = chromadb_dir / "chroma.sqlite3"
-        if not db_path.exists():
-            print(f"ChromaDB database not found at {db_path}")
-            return None
-        if hasattr(rag_agent.RAGRetriever, 'from_chromadb'):
-            return rag_agent.RAGRetriever.from_chromadb(str(db_path))
+        # If we're running as a module (installed addon)
+        if hasattr(rag_agent, 'get_retriever'):
+            return rag_agent.get_retriever()
+        # If we're running directly
         else:
-            print("RAGRetriever.from_chromadb() not implemented in rag_agent.py.")
-            return None
+            # Initialize the retriever with default settings
+            from rag_agent import ChromaDBRetriever
+            return ChromaDBRetriever()
     except Exception as e:
-        print(f"Failed to load RAG retriever from ChromaDB: {e}")
+        print(f"Error initializing RAG retriever: {e}")
         return None
+
