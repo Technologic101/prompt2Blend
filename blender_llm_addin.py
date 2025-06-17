@@ -71,7 +71,7 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         
         # API Key Management
         box = layout.box()
-        box.label(text="OpenAI API Key:", icon='KEY')
+        box.label(text="OpenAI API Key:", icon='KEYINGSET')
         
         # Show API key status
         if scene.ai_openai_key:
