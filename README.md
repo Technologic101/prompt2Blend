@@ -53,16 +53,19 @@ Transform natural language prompts into 3D models directly in Blender using stat
 ## 🧩 Features in Detail
 
 ### AI Model Selection
+
 - Choose between various OpenAI models (GPT-4, GPT-3.5-turbo, etc.)
 - Support for local models through Ollama
 - Model refresh button to update available models
 
 ### Advanced Options
+
 - Temperature control for generation creativity
 - Token limits for response length
 - System prompt customization
 
 ### RAG Integration
+
 - Enhanced context awareness using document retrieval
 - Pre-loaded with Blender 4.4 documentation
 - Custom knowledge base support
@@ -70,11 +73,13 @@ Transform natural language prompts into 3D models directly in Blender using stat
 ## 🛠 Development
 
 ### Building the Add-on
+
 ```bash
 python build_addon.py
 ```
 
 ### Project Structure
+
 - `blender_llm_addon.py` - Main add-on implementation
 - `ui_panels.py` - Blender UI components
 - `rag_agent.py` - RAG implementation for enhanced context
