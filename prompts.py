@@ -24,7 +24,6 @@ SCENE MANAGEMENT:
 - Properly name any created objects with descriptive names.
 
 CODE STRUCTURE:
-- Add brief comments explaining key steps in your code.
 - For complex operations, organize code into functions for readability.
 - Always ensure the script performs the requested operation when executed.
 - Make sure all loops and functions terminate properly.
