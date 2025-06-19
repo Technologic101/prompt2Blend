@@ -22,16 +22,13 @@ The output should be a single Python script, formatted for direct execution in B
 
 
 import bpy
+from bpy.props import StringProperty, EnumProperty
 from datetime import datetime
 from pathlib import Path
-import json
 import re
 import ast
 import random
 import math
-from typing import List
-from pathlib import Path
-import importlib
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import requests
@@ -71,19 +68,32 @@ class AIMODEL_PT_MainPanel(bpy.types.Panel):
         
         # API Key Management
         box = layout.box()
-        box.label(text="OpenAI API Key:", icon='KEYINGSET')
+        row = box.row()
+        row.label(text="OpenAI API Key", icon='KEYINGSET')
         
-        # Show API key status
+        # Show API key status and input
         if scene.ai_openai_key:
-            row = box.row()
-            row.label(text="✓ API Key is configured", icon='CHECKMARK')
-            row.operator("aimodel.manage_api_key", text="", icon='X').action = 'CLEAR'
+            row = box.row(align=True)
+            row.label(text="Status: ", icon='CHECKMARK')
+            row.label(text="API Key is configured")
+            row.operator("aimodel.manage_api_key", text="", icon='X', emboss=False).action = 'CLEAR'
         else:
-            row = box.row()
-            row.label(text="⚠ API Key not configured", icon='ERROR')
-            op = row.operator("aimodel.manage_api_key", text="Set API Key", icon='KEYINGSET')
-            op.action = 'SET'
-            op.api_key = ""  # Clear any previous value
+            row = box.row(align=True)
+            row.label(text="Status: ", icon='ERROR')
+            row.label(text="API Key not configured")
+            
+        # Always show the set key button, but disable it if key is already set
+        row = box.row()
+        op = row.operator("aimodel.manage_api_key", 
+                         text="Change Key" if scene.ai_openai_key else "Set API Key", 
+                         icon='KEYINGSET')
+        op.action = 'SET'
+        op.api_key = scene.ai_openai_key if scene.ai_openai_key else ""
+        op = row.operator("aimodel.manage_api_key", 
+                         text="Clear" if scene.ai_openai_key else "", 
+                         icon='X',
+                         emboss=bool(scene.ai_openai_key))
+        op.action = 'CLEAR'
         
         # Model selection with refresh button
         box = layout.box()
@@ -513,31 +523,51 @@ class AIMODEL_OT_ManageAPIKey(bpy.types.Operator):
     bl_label = "Manage API Key"
     bl_idname = "aimodel.manage_api_key"
     bl_description = "Set or clear your OpenAI API key"
+    bl_options = {'REGISTER'}
     
-    action = bpy.props.EnumProperty(
+    action: bpy.props.EnumProperty(
         name="Action",
         items=[
             ('SET', "Set Key", "Set a new API key"),
             ('CLEAR', "Clear Key", "Remove the saved API key")
         ],
         default='SET'
-    )
+    ) # type: ignore
     
-    api_key = bpy.props.StringProperty(
+    api_key: bpy.props.StringProperty(
         name="API Key",
-        description="Your OpenAI API key",
+        description="Your OpenAI API key (starts with 'sk-')",
         default="",
-        subtype='PASSWORD'
-    )
+        subtype='PASSWORD',
+        options={'SKIP_SAVE'}
+    ) # type: ignore
+    
+    def invoke(self, context, event):
+        if self.action == 'SET':
+            # If we're setting a key, show the popup
+            self.api_key = context.scene.ai_openai_key  # Pre-fill with current key if exists
+            return context.window_manager.invoke_props_dialog(self, width=400)
+        else:
+            # For clear action, just execute directly
+            return self.execute(context)
+    
+    def draw(self, context):
+        layout = self.layout
+        if self.action == 'SET':
+            row = layout.row()
+            row.prop(self, "api_key", text="")
+            layout.label(text="Your API key will be stored in Blender's configuration.", icon='INFO')
     
     def execute(self, context):
         if self.action == 'SET':
-            if not self.api_key:
-                self.report({'ERROR'}, "Please enter an API key")
+            if not self.api_key or not self.api_key.startswith('sk-'):
+                self.report({'ERROR'}, "Please enter a valid OpenAI API key (starts with 'sk-')")
                 return {'CANCELLED'}
             context.scene.ai_openai_key = self.api_key
             self.report({'INFO'}, "API key saved")
             context.scene.ai_last_status = "API key saved successfully"
+            # Update model list when key is set
+            update_model_list(context)
         else:  # CLEAR
             context.scene.ai_openai_key = ""
             self.report({'INFO'}, "API key cleared")
@@ -565,40 +595,6 @@ class AIMODEL_OT_OpenLog(bpy.types.Operator):
         
         return {'FINISHED'}
 
-# Add panel verification operator
-class AIMODEL_OT_VerifyPanel(bpy.types.Operator):
-    bl_idname = "aimodel.verify_panel"
-    bl_label = "Debug Panels"
-    bl_description = "Verify if panels are registered and check their visibility status"
-    bl_options = {'INTERNAL'}
-
-    def execute(self, context):
-        # Check if our panels are registered
-        print("\n--- Panel Verification ---")
-        
-        # Check our own panel registration
-        panel_found = False
-        
-        for panel in bpy.types.Panel.__subclasses__():
-            if panel.__name__.startswith("AIMODEL_PT_"):
-                panel_found = True
-                print(f"Found panel: {panel.__name__} in category '{getattr(panel, 'bl_category', 'None')}'")
-                print(f"  - space_type: {getattr(panel, 'bl_space_type', 'None')}")
-                print(f"  - region_type: {getattr(panel, 'bl_region_type', 'None')}")
-                print(f"  - context: {getattr(panel, 'bl_context', 'None')}")
-                
-        if not panel_found:
-            print("No AIMODEL_PT panels found in registered panel classes!")
-        
-        print("\nTo make the panel visible:")
-        print("1. Press N in the 3D view to show the sidebar")
-        print("2. Look for the 'Gen AI 3D' tab in the sidebar")
-        print("3. If not visible, try switching modes (Object Mode/Edit Mode)")
-        
-        self.report({'INFO'}, "Panel verification completed. Check Blender console for details.")
-        return {'FINISHED'}
-
-
 # Store classes to unregister
 def get_classes():
     return [
@@ -608,18 +604,13 @@ def get_classes():
         AIMODEL_OT_RefreshModels,
         AIMODEL_OT_ManageAPIKey,
         AIMODEL_OT_OpenLog,
-        AIMODEL_OT_VerifyPanel,
     ]
 
 def register():
     # First, register the properties to ensure they exist when panels need them
     try:
-        print("Registering properties first...")
         register_properties()
         print("✓ Properties registered successfully")
-        print("✓ The panel should appear in one of two places:")
-        print("  1. In the 'Gen AI 3D' tab in the 3D View sidebar (press N to show)")
-        print("  2. Or in the 'Tool' tab (as a fallback)")
     except Exception as e:
         print(f"✗ Error registering properties: {e}")
         import traceback
@@ -691,16 +682,11 @@ if __name__ == "__main__":
         traceback.print_exc()
 
 def get_rag_retriever():
-    """Get the RAG retriever instance from ChromaDB using rag_agent.py logic."""
+    """Get the RAG retriever instance"""
     try:
         # If we're running as a module (installed addon)
         if hasattr(rag_agent, 'get_retriever'):
             return rag_agent.get_retriever()
-        # If we're running directly
-        else:
-            # Initialize the retriever with default settings
-            from rag_agent import ChromaDBRetriever
-            return ChromaDBRetriever()
     except Exception as e:
         print(f"Error initializing RAG retriever: {e}")
         return None
