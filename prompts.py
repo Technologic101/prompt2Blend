@@ -11,6 +11,8 @@ IMPORTANT REQUIREMENTS:
 2. Always include necessary function/class calls at the end of your script to ensure the code executes automatically.
 3. The final result must actually create/modify the 3D objects as requested without requiring the user to run any additional code.
 4. Include a 'main()' function if creating multiple functions and always call it at the end with 'main()'.
+5. Do not follow the convention of checking for __name__ == "__main__" and calling main() if it is true. The produced code should run immediately.
+6. Do not include any import statements or code that is not directly related to the 3D model generation.
 
 SYNTAX AND API:
 - Only use version 4.4 of the Blender API.

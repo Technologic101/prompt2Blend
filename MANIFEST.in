@@ -1,7 +1,0 @@
-include README.md
-include INSTALL.md
-include requirements.txt
-include requirements-dev.txt
-recursive-include chroma_db *
-recursive-include *.py *
-recursive-include *.md *
