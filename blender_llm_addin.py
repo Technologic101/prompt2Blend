@@ -6,9 +6,6 @@
 # email: adchap77@gmail.com
 # description: This addon is a Blender addon that allows you to generate 3D graphics models using AI models.
 
-# Import add-on metadata from __init__.py (single source of truth)
-# bl_info is defined only in __init__.py
-
 import bpy
 from bpy.props import StringProperty, EnumProperty
 from datetime import datetime
@@ -22,13 +19,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import requests
 from openai import OpenAI
 import ollama
-try:
-    from . import rag_agent
-    from . import prompts  # Import our new prompts module
-except ImportError:
-    # Fallback for direct execution
-    import rag_agent
-    import prompts  # Import prompts module for direct execution
+from . import rag_agent
+from . import prompts
 
 # Use the system prompt from the prompts module
 system_prompt = prompts.BLENDER_EXPERT_PROMPT
@@ -173,10 +165,69 @@ class AIMODEL_OT_SubmitPrompt(bpy.types.Operator):
 # Core AI functions
 def get_openai_client():
     """Get OpenAI client with API key"""
-    api_key = bpy.context.scene.ai_openai_key
+    if not hasattr(bpy.context, 'scene') or not hasattr(bpy.context.scene, 'ai_openai_key'):
+        raise Exception("Blender scene or API key property not properly initialized.")
+        
+    api_key = (bpy.context.scene.ai_openai_key or '').strip()
+    
     if not api_key:
-        raise Exception("OpenAI API key not configured. Please set your API key in the addon settings.")
-    return OpenAI(api_key=api_key)
+        raise Exception("OpenAI API key is empty. Please set your API key in the addon settings.")
+        
+    if not api_key.startswith('sk-'):
+        raise Exception("Invalid OpenAI API key format. It should start with 'sk-'.")
+    
+    try:
+        # Initialize the client with the API key
+        client = OpenAI(api_key=api_key)
+        
+        # Test the client with a simple request to validate the key
+        client.models.list()
+        
+        return client
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "invalid api key" in error_msg or "401" in error_msg:
+            raise Exception("The provided OpenAI API key is invalid or unauthorized. Please check your key and try again.")
+        elif "rate limit" in error_msg:
+            raise Exception("OpenAI API rate limit exceeded. Please try again later.")
+        else:
+            raise Exception(f"Failed to initialize OpenAI client: {str(e)}")
+
+def call_openai(prompt):
+    """Call OpenAI API with the provided prompt"""
+    client = get_openai_client()
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
+    ]
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=messages,  # type: ignore
+        temperature=0.1,
+        max_tokens=1512
+    )
+    return response.choices[0].message.content
+
+def call_ollama(model, prompt):
+    """Call Ollama API with the provided prompt"""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
+    ]
+    response = ollama.chat(
+        model=model,
+        messages=messages  # type: ignore
+    )
+    try:
+        if isinstance(response, dict) and 'message' in response:
+            return response['message']['content']
+        elif hasattr(response, 'message'):
+            return response.message['content']
+        else:
+            return str(response)
+    except Exception as e:
+        print(f"Error parsing Ollama response: {e}")
+        return str(response)
 
 def extract_python_code(text):
     """Extract Python code from AI response"""
@@ -253,8 +304,16 @@ def save_error_log(prompt, model, generated_code, error):
         print(f"Failed to save error log: {e}")
         return None
 
-def generate_3d_model(model, prompt):
-    """Main function to generate and execute 3D model code using the selected model/provider"""
+def generate_3d_model(model, prompt, max_retries=2):
+    """
+    Main function to generate and execute 3D model code using the selected model/provider.
+    Will attempt to fix errors in the generated code by asking the AI to correct them.
+    
+    Args:
+        model: The AI model to use
+        prompt: The user's prompt
+        max_retries: Maximum number of attempts to fix code errors (default: 2)
+    """
     # Determine provider
     if model == 'chatgpt':
         provider = 'openai'
@@ -264,39 +323,84 @@ def generate_3d_model(model, prompt):
         provider = 'ollama'
         model_name = model
         openai_key = None
-    # Use RAG agent for retrieval and code generation
-    retriever = get_rag_retriever()
-    if retriever:
-        ai_response = rag_agent.query_with_rag(prompt, retriever, provider=provider, model=model_name, openai_key=openai_key)
+    
+    # Track attempt number for logging
+    attempt = 1
+    last_error = None
+    original_prompt = prompt
+    
+    while attempt <= max_retries:
+        bpy.context.scene.ai_last_status = f"Generating code (attempt {attempt}/{max_retries})..."
+        print(f"Attempt {attempt}/{max_retries} to generate code")
+        
+        # Use RAG agent for retrieval and code generation
+        retriever = get_rag_retriever()
+        try:
+            if retriever:
+                ai_response = rag_agent.query_with_rag(prompt, retriever, provider=provider, model=model_name, openai_key=openai_key)
+            else:
+                # Fallback to direct call if retriever not available
+                if provider == 'openai':
+                    ai_response = call_openai(prompt)
+                else:
+                    ai_response = call_ollama(model, prompt)
+                
+            if not ai_response:
+                raise Exception("No response received from AI model")
+                
+            print(f"Response preview: {ai_response[:200]}...")
+            
+            # Extract and validate code
+            code = extract_python_code(ai_response)
+            if not code:
+                raise Exception("No Python code found in the response")
+                
+            print(f"Extracted code:\n{code}")
+            validate_code_safety(code)
+            
+            # Execute the code
+            # Create safe execution environment
+            safe_globals = {
+                'bpy': bpy,
+                'math': math,
+                'random': random,
+                'np': np,
+            }
+            exec(code, safe_globals)
+            print("Code executed successfully!")
+            return  # Success - exit the function
+            
+        except Exception as e:
+            last_error = str(e)
+            print(f"Error on attempt {attempt}: {last_error}")
+            
+            if attempt < max_retries:
+                # Create error correction prompt
+                error_correction_prompt = f"""
+The previous code generated an error. Please fix the code and ensure it runs correctly.
 
-    if ai_response:
-        print(f"Response preview: {ai_response[:200]}...")
-    else:
-        raise Exception("No response received from AI model")
-    
-    # Extract and validate code
-    code = extract_python_code(ai_response)
-    print(f"Extracted code:\n{code}")
-    
-    validate_code_safety(code)
-    
-    # Execute the code
-    try:
-        # Create safe execution environment
-        safe_globals = {
-            'bpy': bpy,
-            'math': math,
-            'random': random,
-        }
-        exec(code, safe_globals)
-        print("Code executed successfully!")
-    except Exception as e:
-        # Save error log
-        log_path = save_error_log(prompt, model, code, e)
-        if log_path:
-            raise Exception(f"Code execution failed. Error log saved to: {log_path}\nError: {str(e)}")
-        else:
-            raise Exception(f"Code execution failed: {str(e)}")
+Original request: {original_prompt}
+
+Error message: {last_error}
+
+Previous code:
+```python
+{code}
+```
+
+Please provide a corrected version of the code that fixes this error and fulfills the original request.
+Make sure the code is complete and executable.
+"""
+                # Update prompt for next attempt
+                prompt = error_correction_prompt
+                attempt += 1
+            else:
+                # Last attempt failed, save error log
+                log_path = save_error_log(original_prompt, model, code, last_error)
+                if log_path:
+                    raise Exception(f"Code execution failed after {max_retries} attempts. Error log saved to: {log_path}\nFinal error: {last_error}")
+                else:
+                    raise Exception(f"Code execution failed after {max_retries} attempts: {last_error}")
 
 def get_ollama_models():
     """Fetch available models from Ollama"""

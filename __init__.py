@@ -12,13 +12,6 @@ bl_info = {
     "category": "3D View",
 }
 
-# Import the main add-on module using absolute import
-try:
-    import blender_llm_addin
-except ImportError:
-    # This is needed for the build script
-    from . import blender_llm_addin
-
 def register():
     """Register all operators and panels"""
     # First unregister everything to handle reloads
