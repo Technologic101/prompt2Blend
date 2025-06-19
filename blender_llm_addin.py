@@ -354,8 +354,7 @@ def generate_3d_model(model, prompt, max_retries=2):
             code = extract_python_code(ai_response)
             if not code:
                 raise Exception("No Python code found in the response")
-                
-            print(f"Extracted code:\n{code}")
+            
             validate_code_safety(code)
             
             # Execute the code
@@ -366,6 +365,8 @@ def generate_3d_model(model, prompt, max_retries=2):
                 'random': random,
                 'np': np,
             }
+
+            print(f"Executing code:\n{code}")
             exec(code, safe_globals)
             print("Code executed successfully!")
             return  # Success - exit the function
