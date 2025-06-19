@@ -1,83 +1,104 @@
-# Text-to-3D Model addin for Blender using Ollama and OpenAI GPT
+# Prompt2Blend: AI-Powered 3D Model Generator for Blender
 
-This project demonstrates how to integrate AI-powered large language models (LLMs) with Blender to create a text-to-graphics modeling workflow. The system supports both open-source LLMs (e.g., Ollama-supported models) and OpenAI GPT, enabling users to generate 3D models in Blender by simply entering text prompts.
-</br>
-The below explains how to operate this in detail.</br>
-- [Using Open-Source Models with Blender for AI-Assisted 3D Modeling: Comparative Study with OpenAI GPT](https://medium.com/@laputa99999/using-open-source-models-with-blender-for-ai-assisted-3d-modeling-comparative-study-with-openai-9848209f93b8)
-- In addition, LLM media art tool and demo(https://github.com/mac999/llm-media-art-demo) link explain what is good tool how to visualize data.</br>
-<img src='https://miro.medium.com/v2/resize:fit:720/format:webp/1*afjizeWcUVYJuFNx99ZKKA.png' width="500"><br>Prompt: Create 100 cubes along circle line with radius 30. The each cube has random color and size.</br></img></br>
-<img src='https://github.com/mac999/blender-llm-addin/blob/main/doc/blender_gpt.gif' width="800"><br>Prompt: Generate 100 cubes along the line of a circle with a radius of 30. The color and size of each cube are random.</br></img>
+![Blender Add-on](https://img.shields.io/badge/Blender-4.4+-orange?logo=blender)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
-## Features
-- **Custom Blender UI Panel**: Allows users to select an AI model and input text prompts directly in Blender's 3D Viewport.
-- **AI Model Support**: Compatible with both open-source models (e.g., `Gemma`, `Phi`) and OpenAI GPT.
-- **Dynamic 3D Modeling**: Generates Blender Python scripts based on user prompts to create 3D objects like grids, sinusoidal patterns, and more.
-- **Error Handling**: Automatically fixes and retries failed AI-generated code.
+Transform natural language prompts into 3D models directly in Blender using state-of-the-art AI models. This add-on integrates with OpenAI's GPT models and local Ollama models to generate and manipulate 3D content through simple text prompts.
 
-## Getting Started
+## 🌟 Features
 
-### Prerequisites
-1. **Blender**: Install Blender (version 2.9x or higher) from [Blender.org](https://www.blender.org/).
-2. **Python Dependencies**: Install the required Python libraries in Blender's Python environment.
+- **AI-Powered 3D Generation**: Create complex 3D models using natural language prompts
+- **Multiple AI Backends**: Supports both OpenAI's API and local Ollama models
+- **RAG Integration**: Enhanced context awareness with Retrieval-Augmented Generation
+- **Blender Integration**: Seamless workflow within Blender's interface
+- **Customizable**: Fine-tune parameters and model selection
 
-### Installation
+## 🚀 Installation
 
-1. Navigate to Blender's Python interpreter directory:
-   ```bash
-   cd "C:/Program Files/Blender Foundation/Blender <version>/python/bin"
-   ```
-2. Install the required libraries:
-   ```bash
-   ./python.exe -m ensurepip
-   ./python.exe -m pip install pandas numpy openai ollama
-   ```
+1. **Download the latest release** from the [releases page](https://github.com/Technologic101/prompt2blend/releases)
+2. **Install in Blender**:
+   - Open Blender
+   - Go to `Edit > Preferences > Add-ons`
+   - Click "Install..." and select the downloaded `.zip` file
+   - Enable the add-on by checking the box next to "Prompt2Blend"
 
-### Clone the Repository
-Clone this GitHub repository:
+## 🔑 Prerequisites
+
+- Blender 4.4 or later
+- Python 3.10+
+- For OpenAI integration: Valid OpenAI API key
+- For local models: [Ollama](https://ollama.ai/) installed and running
+
+## 🛠️ Setup
+
+1. **Configure API Keys**:
+   - Open Blender and go to the 3D View
+   - Find the "Gen AI 3D" tab in the sidebar (press 'N' if not visible)
+   - Enter your OpenAI API key in the settings
+
+2. **Using Local Models**:
+   - Install and run Ollama on your system
+   - Pull the desired model (e.g., `ollama pull mistral`)
+   - Select the model from the dropdown in the add-on panel
+
+## 🎮 Usage
+
+1. Open Blender and navigate to the 3D View
+2. Find the "Gen AI 3D" tab in the sidebar (press 'N' if not visible)
+3. Select your preferred AI model from the dropdown
+4. Enter your prompt in the text box (e.g., "Create a low-poly tree")
+5. Click "Generate 3D Model"
+6. Watch as your model comes to life!
+
+## 🧩 Features in Detail
+
+### AI Model Selection
+
+- Choose between various OpenAI models (GPT-4, GPT-3.5-turbo, etc.)
+- Support for local models through Ollama
+- Model refresh button to update available models
+
+### Advanced Options
+
+- Temperature control for generation creativity
+- Token limits for response length
+- System prompt customization
+
+### RAG Integration
+
+- Enhanced context awareness using document retrieval
+- Pre-loaded with Blender 4.4 documentation
+- Custom knowledge base support
+
+## 🛠 Development
+
+### Building the Add-on
+
 ```bash
-git clone https://github.com/mac999/blender-llm-addin.git
-cd blender-llm-addin
+python build_addon.py
 ```
 
-### Setting Up API Keys
-For OpenAI GPT integration, replace `<input your OpenAI API key>` in the script with your OpenAI API key.
+### Project Structure
 
-## Usage
-1. Open Blender and go to the **Scripting** editor.
-2. Copy and paste the script into a new file.
-3. Run the script to load the custom UI panel.
-4. In Blender's 3D Viewport:
-   - Select an AI model from the dropdown.
-   - Enter your text prompt.
-   - Click **Submit** to generate and execute the Blender Python script.
-5. View the 3D model generated in the Blender scene.
-<img src="https://github.com/mac999/blender-llm-addin/blob/main/doc/img1.PNG"></img>
+- `blender_llm_addon.py` - Main add-on implementation
+- `ui_panels.py` - Blender UI components
+- `rag_agent.py` - RAG implementation for enhanced context
+- `build_addon.py` - Build script for packaging
 
-## Example Prompts
-- "Create a grid of cubes with random colors and sizes."
-- "Generate cubes following a cosine wave pattern along the y-axis."
-- "Make a large yellow box at (6, -3) with a size of 5 units."
+## 🤝 Contributing
 
-## Supported Models
-- **OpenAI GPT** (e.g., `gpt-4`, `gpt-4o`)
-- **Open Source Models via Ollama**:
-  - `Gemma`
-  - `Phi`
-  - `CodeLlama`
-  - `Qwen2.5`
+Contributions are welcome! Please read our [contributing guidelines](CONTRIBUTING.md) before submitting pull requests.
 
-## Results
-Example outputs include:
-- Grids of cubes with varying colors and sizes.
-- Sinusoidal placement of objects.
-- Dynamic scaling and positioning based on user-defined properties.
+## 📄 License
 
-## Contributing
-Contributions are welcome! If you have ideas for improvements or want to add support for additional models, feel free to submit a pull request.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## License
-This project is licensed under the MIT License.
+## 🙏 Acknowledgments
 
-## Author
-**Taewook Kang**  
-If you have questions or suggestions, feel free to reach out at [laputa99999@gmail.com](mailto:laputa99999@gmail.com).
+- Blender Foundation for the amazing 3D creation suite
+- OpenAI for their powerful language models
+- The Ollama team for making local AI models accessible
+
+---
+
+💡 **Tip**: For best results, be specific in your prompts. Instead of "a car," try "a low-poly sports car with 4 wheels and a spoiler."
