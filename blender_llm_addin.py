@@ -9,18 +9,6 @@
 # Import add-on metadata from __init__.py (single source of truth)
 # bl_info is defined only in __init__.py
 
-system_prompt = """
-   You are an expert Blender Python developer. Write a complete, ready-to-run Python script using Blender's bpy API that matches the user's request with the following guidelines:
-
-The script should not clear the scene unless explicitly instructed.
-
-Only use version 4.4 of the Blender API.
-
-The output should be a single Python script, formatted for direct execution in Blender's scripting workspace.
-
-"""
-
-
 import bpy
 from bpy.props import StringProperty, EnumProperty
 from datetime import datetime
@@ -36,9 +24,14 @@ from openai import OpenAI
 import ollama
 try:
     from . import rag_agent
+    from . import prompts  # Import our new prompts module
 except ImportError:
     # Fallback for direct execution
     import rag_agent
+    import prompts  # Import prompts module for direct execution
+
+# Use the system prompt from the prompts module
+system_prompt = prompts.BLENDER_EXPERT_PROMPT
 
 # Create Blender UI Panel
 class AIMODEL_PT_MainPanel(bpy.types.Panel):
@@ -185,62 +178,6 @@ def get_openai_client():
         raise Exception("OpenAI API key not configured. Please set your API key in the addon settings.")
     return OpenAI(api_key=api_key)
 
-def call_openai(prompt):
-    """Call OpenAI API with RAG if available, using shared RAG logic"""
-    client = get_openai_client()
-    retriever = get_rag_retriever()
-    if retriever:
-        try:
-            # Use shared RAG query logic
-            return rag_agent.query_with_rag(
-                prompt, retriever, provider='openai', model='gpt-4', openai_key=client.api_key
-            )
-        except Exception as e:
-            print(f"RAG failed, falling back to direct prompt: {e}")
-    # Fallback: direct prompt
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt}
-    ]
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=messages,  # type: ignore
-        temperature=0.1,
-        max_tokens=1512
-    )
-    return response.choices[0].message.content
-
-def call_ollama(model, prompt):
-    """Call Ollama API with RAG if available, using shared RAG logic"""
-    retriever = get_rag_retriever()
-    if retriever:
-        try:
-            # Use shared RAG query logic
-            return rag_agent.query_with_rag(
-                prompt, retriever, provider='ollama', model=model
-            )
-        except Exception as e:
-            print(f"RAG failed, falling back to direct prompt: {e}")
-    # Fallback: direct prompt
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt}
-    ]
-    response = ollama.chat(
-        model=model,
-        messages=messages  # type: ignore
-    )
-    try:
-        if isinstance(response, dict) and 'message' in response:
-            return response['message']['content']
-        elif hasattr(response, 'message'):
-            return response.message['content']
-        else:
-            return str(response)
-    except Exception as e:
-        print(f"Error parsing Ollama response: {e}")
-        return str(response)
-
 def extract_python_code(text):
     """Extract Python code from AI response"""
     # Look for code blocks
@@ -331,12 +268,7 @@ def generate_3d_model(model, prompt):
     retriever = get_rag_retriever()
     if retriever:
         ai_response = rag_agent.query_with_rag(prompt, retriever, provider=provider, model=model_name, openai_key=openai_key)
-    else:
-        # fallback to direct call
-        if provider == 'openai':
-            ai_response = call_openai(prompt)
-        else:
-            ai_response = call_ollama(model, prompt)
+
     if ai_response:
         print(f"Response preview: {ai_response[:200]}...")
     else:
